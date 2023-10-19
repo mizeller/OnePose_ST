@@ -89,17 +89,23 @@ def get_bbox3d(box_path):
     with open(box_path, 'r') as f:
         lines = f.readlines()
     box_data = [float(e) for e in lines[1].strip().split(',')]
-    ex, ey, ez = box_data[3: 6]
-    bbox_3d = np.array([
-        [-ex, -ey, -ez],
-        [ex,  -ey, -ez],
-        [ex,  -ey, ez],
-        [-ex, -ey, ez],
-        [-ex,  ey, -ez],
-        [ ex,  ey, -ez],
-        [ ex,  ey, ez],
-        [-ex,  ey, ez]
-    ]) * 0.5
+    px, py, pz = box_data[:3]
+    ex, ey, ez = box_data[3:6]
+    ex /= 2
+    ey /= 2
+    ez /= 2
+    bbox_3d = np.array(
+        [
+            [px - ex, py - ey, pz - ez],  # back, left, down
+            [px + ex, py - ey, pz - ez],  # front, left, down
+            [px + ex, py - ey, pz + ez],  # front, left, up
+            [px - ex, py - ey, pz + ez],  # back, left, up
+            [px - ex, py + ey, pz - ez],  # back, right, down
+            [px + ex, py + ey, pz - ez],  # front, right, down
+            [px + ex, py + ey, pz + ez],  # front, right, up
+            [px - ex, py + ey, pz + ez],  # back, right, up
+        ]
+    )
     bbox_3d_homo = np.concatenate([bbox_3d, np.ones((8, 1))], axis=1)
     return bbox_3d, bbox_3d_homo
 
@@ -210,17 +216,13 @@ def data_process_anno(data_dir, downsample_rate=1, hw=512):
                 data = [float(e) for e in eles]
 
                 position = data[1:4]
-                quaternion = data[4:]
-                rot_mat = quaternions.quat2mat(quaternion)
-                rot_mat = rot_mat @ np.array([
-                    [1,  0,  0],
-                    [0, -1,  0],
-                    [0,  0, -1]
-                ])
+                rot_mat = np.array(data[4:]).reshape(3, 3)
+                T_wc = affines.compose(position, rot_mat, np.ones(3))
+                T_ow = np.array([[1,0,0,0],
+                                 [0,1,0,0],
+                                 [0,0,1,0],
+                                 [0,0,0,1]])
 
-                T_ow = parse_box(paths['box_path'])
-                T_cw = affines.compose(position, rot_mat, np.ones(3))
-                T_wc = np.linalg.inv(T_cw)
                 T_oc = T_wc @ T_ow
                 pose_save_path = osp.join(paths['out_pose_dir'], '{}.txt'.format(index))
                 box_save_path = osp.join(paths['reproj_box_dir'], '{}.txt'.format(index))
