@@ -18,8 +18,9 @@ from omegaconf import DictConfig
 
 from src.utils.ray_utils import ProgressBar, chunks
 
+
 def sfm(cfg):
-    """ Sparse reconstruction and postprocess (on 3d points and features)"""
+    """Sparse reconstruction and postprocess (on 3d points and features)"""
     data_dirs = cfg.dataset.data_dir
 
     if isinstance(data_dirs, str):
@@ -90,18 +91,17 @@ def sfm(cfg):
 
 def sfm_worker(data_dirs, cfg, worker_id=0, pba=None):
     logger.info(
-        f"Worker: {worker_id} will process: {[(data_dir.split(' ')[0]).split('/')[-1][:4] for data_dir in data_dirs]}, total: {len(data_dirs)} objects"
+        f"Worker: {worker_id} will process: {[(data_dir.split(' ')[0]).split('/')[-1] for data_dir in data_dirs]}, total: {len(data_dirs)} objects"
     )
     data_dirs = tqdm(data_dirs) if pba is None else data_dirs
     for data_dir in data_dirs:
         logger.info(f"Processing {data_dir}.")
         root_dir, sub_dirs = data_dir.split(" ")[0], data_dir.split(" ")[1:]
-
         img_lists = []
         ext_bag = [".png", ".jpg"]
         for sub_dir in sub_dirs:
             seq_dir = osp.join(root_dir, sub_dir)
-            img_dir_name = 'color'
+            img_dir_name = "color"
             img_name_lists = os.listdir(osp.join(seq_dir, img_dir_name))
             img_lists += [
                 osp.join(seq_dir, img_dir_name, img_name)
@@ -142,13 +142,15 @@ def sfm_worker_ray_wrapper(*args, **kwargs):
 
 
 def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
-    """ 
+    """
     Keypoint-Free SfM: coarse reconstruction (including match features, triangulation), post optimization
     """
     from src.sfm_utils import (
         generate_empty,
         triangulation,
-        pairs_exhaustive_all, pairs_from_index, pairs_from_poses
+        pairs_exhaustive_all,
+        pairs_from_index,
+        pairs_from_poses,
     )
     from src.KeypointFreeSfM import coarse_match, post_optimization
 
@@ -186,10 +188,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
         os.system(f"rm -rf {vis3d_pth}")
     Path(outputs_dir).mkdir(exist_ok=True, parents=True)
 
-    if (
-        not osp.exists(osp.join(deep_sfm_dir, "model_coarse"))
-        or cfg.overwrite_coarse
-    ):
+    if not osp.exists(osp.join(deep_sfm_dir, "model_coarse")) or cfg.overwrite_coarse:
         logger.info("Keypoint-Free SfM coarse reconstruction begin...")
         os.system(f"rm -rf {empty_dir}")
         os.system(f"rm -rf {deep_sfm_dir}")
@@ -198,23 +197,21 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
         )  # Force refinement to recompute fine match
 
         if covis_num == -1:
-            pairs_exhaustive_all.exhaustive_all_pairs(
-                img_lists, covis_pairs_out
-            )
+            pairs_exhaustive_all.exhaustive_all_pairs(img_lists, covis_pairs_out)
         else:
-            if cfg.sfm.gen_cov_from == 'index':
+            if cfg.sfm.gen_cov_from == "index":
                 pairs_from_index.covis_from_index(
                     img_lists,
                     covis_pairs_out,
                     num_matched=covis_num,
                     gap=cfg.sfm.gap,
                 )
-            elif cfg.sfm.gen_cov_from == 'pose':
+            elif cfg.sfm.gen_cov_from == "pose":
                 pairs_from_poses.covis_from_pose(
                     img_lists,
                     covis_pairs_out,
                     covis_num,
-                    min_rotation=cfg.sfm.min_rotation
+                    min_rotation=cfg.sfm.min_rotation,
                 )
             else:
                 raise NotImplementedError
@@ -225,7 +222,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
             feature_out,
             matches_out,
             use_ray=cfg.use_local_ray,
-            verbose=cfg.verbose
+            verbose=cfg.verbose,
         )
         generate_empty.generate_model(img_lists, empty_dir)
 
@@ -266,17 +263,14 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                 )
 
     if cfg.enable_post_refine:
-        if (
-            not osp.exists(osp.join(deep_sfm_dir, "model"))
-            or cfg.overwrite_fine
-        ):
+        if not osp.exists(osp.join(deep_sfm_dir, "model")) or cfg.overwrite_fine:
             assert osp.exists(
                 osp.join(deep_sfm_dir, "model_coarse")
             ), f"model_coarse not exist under: {deep_sfm_dir}, please set 'cfg.overwrite_coarse = True'"
             os.system(f"rm -rf {osp.join(deep_sfm_dir, 'model')}")
 
             # configs for post optimization:
-            post_optim_configs = cfg.post_optim if 'post_optim' in cfg else None
+            post_optim_configs = cfg.post_optim if "post_optim" in cfg else None
 
             logger.info("Keypoint-Free SfM post refinement begin...")
             state = post_optimization.post_optimization(
@@ -290,15 +284,16 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                 fine_match_use_ray=cfg.use_local_ray,
                 vis3d_pth=vis3d_pth,
                 verbose=cfg.verbose,
-                args=post_optim_configs
+                args=post_optim_configs,
             )
             if state == False:
                 logger.error("Coarse reconstruction failed!")
     else:
         raise NotImplementedError
 
+
 def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
-    """ Filter points and average feature"""
+    """Filter points and average feature"""
     from src.sfm_utils.postprocess import filter_points, feature_process, filter_tkl
 
     bbox_path = osp.join(root_dir, "box3d_corners.txt")
@@ -340,9 +335,7 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
         )  # crop 3d points by 3d box and save as colmap format
     else:
         os.system(f"rm -rf {model_filted_bbox_path}")
-        os.system(
-            f"cp -r {model_path} {model_filted_bbox_path}"
-        )
+        os.system(f"cp -r {model_path} {model_filted_bbox_path}")
 
     # select track length to limit the number of 3d points below thres.
     track_length, points_count_list = filter_tkl.get_tkl(
@@ -360,7 +353,9 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
         model_filted_bbox_path, track_length
     )  # crop 3d points by 3d box and track length
 
-    merge_xyzs, merge_idxs = filter_points.merge(xyzs, points_ids)  # merge 3d points by distance between points
+    merge_xyzs, merge_idxs = filter_points.merge(
+        xyzs, points_ids
+    )  # merge 3d points by distance between points
 
     # Save loftr coarse keypoints:
     cfg_coarse = deepcopy(cfg)
