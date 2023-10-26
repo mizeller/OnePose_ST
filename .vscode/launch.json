@@ -1,0 +1,42 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+        },
+        {
+            "name": "OnePose++: DBG parse_scanned_data.py",
+            "type": "python",
+            "request": "launch",
+            "program": "/local/home/mizeller/projects/OnePose_ST/parse_scanned_data.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            // args for parse_data
+            "args": [
+                "--scanned_object_path",
+                "/local/home/mizeller/projects/OnePose_ST/data/demo/demo_cam"
+            ],
+        },
+        {
+            "name": "OnePose++: DBG run.py",
+            "type": "python",
+            "request": "launch",
+            "program": "/local/home/mizeller/projects/OnePose_ST/run.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "+preprocess=sfm_demo",
+                "dataset.data_dir=[/local/home/mizeller/projects/OnePose_ST/data/demo/demo_cam demo_cam-annotate]",
+                "dataset.outputs_dir=/local/home/mizeller/projects/OnePose_ST/data/demo/sfm_model"
+            ]
+        }
+    ]
+}

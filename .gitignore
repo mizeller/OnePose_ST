@@ -72,13 +72,13 @@ fabric.properties
 .idea/caches/build_file_checksums.ser
 
 ### VisualStudioCode template
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-*.code-workspace
-**/.vscode
+# .vscode/*
+# !.vscode/settings.json
+# !.vscode/tasks.json
+# !.vscode/launch.json
+# !.vscode/extensions.json
+# *.code-workspace
+# **/.vscode
 
 ### Python template
 # Byte-compiled / optimized / DLL files
