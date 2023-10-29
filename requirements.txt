@@ -23,3 +23,13 @@ transforms3d
 natsort
 plyfile
 pycolmap==0.3.0
+pylint==2.15.4
+albumentations==0.5.1
+numba==0.55
+loguru==0.5.3
+h5py==3.1.0
+pylint==2.15.4
+matplotlib==3.3.2
+tqdm==4.65.0
+
+
