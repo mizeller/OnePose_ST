@@ -12,6 +12,7 @@ echo -e "Current work dir:\t $PROJECT_DIR" > output.txt
 echo -e "Custom data dir:\t $DATA_DIR" > output.txt 
 
 : '
+test
 The DATA_PATH points to the file structure containing required files in the naming convention
 defined by OnePose++. This data was generated during the synthetic data generation pipeline 
 and manually re-structured to conform with the required conventions (*).
