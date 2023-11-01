@@ -35,6 +35,7 @@ def geometric_verification(colmap_path, database_path, pairs_path, verbose=True)
         "pairs",
     ]
     if verbose:
+        logging.info(" ".join(cmd))
         ret = subprocess.call(cmd)
     else:
         ret_all = subprocess.run(cmd, capture_output=True)
