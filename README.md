@@ -9,7 +9,6 @@
 conda create --name oneposeplus -y python=3.7
 conda activate oneposeplus
 pip install -r requirements.txt
-conda install -c -y pytorch pytorch=1.8.0
 ```
 
 [LoFTR](https://github.com/zju3dv/LoFTR) and [DeepLM](https://github.com/hjwdzh/DeepLM) are used in this project. Thanks for their great work, and we appreciate their contribution to the community. Please follow their installation instructions and LICENSE:
@@ -27,17 +26,16 @@ Note that the efficient optimizer DeepLM is used in our SfM refinement phase. If
 
 Download the [pretrained models](https://zjueducn-my.sharepoint.com/:f:/g/personal/12121064_zju_edu_cn/EhRhr5PMG-ZLkQjClFCUYhIB_6-307bBmepX_5Cej4Z_wg?e=tSNHMn), including our 2D-3D matching and LoFTR models. Then move them to `${REPO_ROOT}/weights`.
 
-[Optional] You may optionally try out our web-based 3D visualization tool [Wis3D](https://github.com/zju3dv/Wis3D) for convenient and interactive visualizations of feature matches and point clouds. We also provide many other cool visualization features in Wis3D, welcome to try it out.
 
-```bash
-# Working in progress, should be ready very soon, only available on test-pypi now.
-pip install -i https://test.pypi.org/simple/ wis3d
-```
 ## Demo
 After the installation, you can refer to [this page](doc/demo.md) to run the demo with your custom data.
 
 
 
+## Alternatively using DOCKER
+1. `docker pull ghcr.io/cvg/spot_pose_estimation:hermann` 
+2. *[CMD+SHIFT+P] Dev Containers: Rebuild Container*
+This should re-launch the current repo in a dev container, which 
 
 
 ## Acknowledgement
