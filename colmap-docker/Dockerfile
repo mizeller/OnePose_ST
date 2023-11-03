@@ -1,8 +1,7 @@
-FROM nvidia/cudagl:11.1-devel-ubuntu18.04
+FROM nvidia/cudagl:11.1-devel-ubuntu20.04
 
 # Prevent stop building ubuntu at time zone selection.  
 ENV DEBIAN_FRONTEND=noninteractive
-
 
 # Prepare and empty machine for building
 RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys A4B469963BF863CC
@@ -34,24 +33,18 @@ RUN apt-get -y install \
     libsuitesparse-dev
 RUN git clone https://github.com/ceres-solver/ceres-solver.git --branch 1.14.0
 RUN cd ceres-solver && \
-	mkdir build && \
-	cd build && \
-	cmake .. -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF && \
-	make -j4 && \
-	make install
+    mkdir build && \
+    cd build && \
+    cmake .. -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF && \
+    make -j4 && \
+    make install
 
 # Build and install COLMAP
-
-# Note: This Dockerfile has been tested using COLMAP pre-release 3.7.
-# Later versions of COLMAP (which will be automatically cloned as default) may
-# have problems using the environment described thus far. If you encounter
-# problems and want to install the tested release, then uncomment the branch
-# specification in the line below
 RUN git clone https://github.com/colmap/colmap.git --branch 3.7
 
 RUN cd colmap && \
-	mkdir build && \
-	cd build && \
-	cmake .. && \
-	make -j4 && \
-	make install
+    mkdir build && \
+    cd build && \
+    cmake .. && \
+    make -j4 && \
+    make install
