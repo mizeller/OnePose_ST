@@ -63,6 +63,37 @@ RUN cd colmap && \
 
 ## INSTALL PYTHON + PACKAGES (TODO)
 
+# basics
+RUN apt-get update && apt-get install -y \
+    python3-flake8 \
+    python3-opencv \
+    python3-pip \
+    python3-pytest-cov \
+    python3-setuptools \
+    && rm -rf /var/lib/apt/lists/*
+
+# python3 (pip)
+RUN alias pip="python3 -m pip"
+RUN python3 -m pip install --upgrade pip && python3 -m pip install -U \
+    argcomplete \
+    autopep8 \
+    flake8 \
+    flake8-blind-except \
+    flake8-builtins \
+    flake8-class-newline \
+    flake8-comprehensions \
+    flake8-deprecated \
+    flake8-docstrings \
+    flake8-import-order \
+    flake8-quotes \
+    pytest-repeat \
+    pytest-rerunfailures \
+    pytest \
+    pydocstyle \
+    scikit-learn \
+    loguru \
+    h5py
+
 ## INSTALL ONEPOSE++ + DEPENDENCIES (TODO)
 
 ## INSTALL ROS2 + DEPENDENCIES (TODO)
@@ -75,36 +106,7 @@ RUN cd colmap && \
 #         rm -rf /var/lib/apt/lists/*
 
 
-# # Python basics
-# RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-#     python3-flake8 \
-#     python3-opencv \
-#     python3-pip \
-#     python3-pytest-cov \
-#     python3-setuptools \
-#     && rm -rf /var/lib/apt/lists/*
 
-# # Python3 (PIP)
-# RUN alias pip="python3 -m pip"
-# RUN python3 -m pip install --upgrade pip && python3 -m pip install -U \
-#     argcomplete \
-#     autopep8 \
-#     flake8 \
-#     flake8-blind-except \
-#     flake8-builtins \
-#     flake8-class-newline \
-#     flake8-comprehensions \
-#     flake8-deprecated \
-#     flake8-docstrings \
-#     flake8-import-order \
-#     flake8-quotes \
-#     pytest-repeat \
-#     pytest-rerunfailures \
-#     pytest \
-#     pydocstyle \
-#     scikit-learn \
-#     loguru \
-#     h5py
 
 # # Setup ROS2 Foxy
 # RUN locale-gen en_US en_US.UTF-8
