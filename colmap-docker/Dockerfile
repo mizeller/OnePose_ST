@@ -1,4 +1,4 @@
-FROM nvidia/cudagl:11.1-devel-ubuntu20.04
+FROM nvidia/cudagl:11.3.0-devel-ubuntu20.04
 
 # Prevent stop building ubuntu at time zone selection.  
 ENV DEBIAN_FRONTEND=noninteractive

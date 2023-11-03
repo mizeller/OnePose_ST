@@ -1,2 +1,2 @@
-docker build -t="colmap:latest" .;
-docker run --gpus all -w /workspaces/OnePose_ST -v $1:/workspaces/OnePose_ST -it colmap:latest;
+docker build -t="colmap:cuda113" .;
+docker run --gpus all -w /workspaces/OnePose_ST -v ~/projects/OnePose_ST:/workspaces/OnePose_ST -it colmap:cuda113;
