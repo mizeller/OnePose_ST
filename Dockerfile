@@ -101,9 +101,7 @@ WORKDIR /OnePose_ST
 COPY . /OnePose_ST
 
 # Install the Python dependencies
-# RUN pip install --no-cache-dir -r requirements.txt
 
-WORKDIR /home/mizeller/projects/OnePose_ST
 RUN python3 -m pip install --ignore-installed -r /OnePose_ST/requirements.txt \
     && python3 -m pip uninstall -y torch torchvision numpy \
     && pip freeze | grep cu12 | xargs pip uninstall -y \
