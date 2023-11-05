@@ -40,7 +40,7 @@ cfgs = {
     },
     "optimizer": {
         # Dataloading related:
-        "num_workers": 12,
+        "num_workers": 8, # TODO: set this to the max possible value of your system
         "batch_size": 2000,
         "solver_type": "FirstOrder",
         "residual_mode": "geometry_error",  
