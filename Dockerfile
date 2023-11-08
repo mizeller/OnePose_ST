@@ -93,12 +93,7 @@ RUN python3 -m pip install --upgrade pip && python3 -m pip install -U \
 WORKDIR /OnePose_ST
 COPY requirements.txt /OnePose_ST
 
-# RUN python3 -m pip install --ignore-installed -r /OnePose_ST/requirements.txt \
-RUN python3 -m pip install -r /OnePose_ST/requirements.txt \
-    && python3 -m pip uninstall -y torch torchvision numpy \
-    && pip freeze | grep cu12 | xargs pip uninstall -y \
-    && python3 -m pip install torch==1.11.0+cu113 torchvision==0.12.0+cu113 numpy==1.20.3 --extra-index-url https://download.pytorch.org/whl/cu113
-
+RUN python3 -m pip install -r /OnePose_ST/requirements.txt 
 RUN ln -s /usr/bin/gcc-9 /usr/local/cuda-11.3/bin/gcc && ln -s /usr/bin/g++-9 /usr/local/cuda-11.3/bin/g++
 
 # ------------------------------------ Start: DeepLM Stuff ---------------------------------- #

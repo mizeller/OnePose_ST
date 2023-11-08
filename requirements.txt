@@ -9,13 +9,12 @@ yacs>=0.1.8
 pytorch_memlab
 joblib
 pytorch3d
-# torch==1.8.0
+torch==1.13.1
 wis3d==1.0.1
 open3d
 einops==0.3.0
 kornia==0.4.1
 autopep8
-pickle5==0.0.11
 timm>=0.3.2
 hydra-core
 omegaconf
