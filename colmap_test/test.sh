@@ -1,4 +1,0 @@
-echo 'Testing matches importer command'
-colmap matches_importer --database_path /workspaces/OnePose_ST/data/demo/sfm_model/outputs_softmax_loftr_loftr/demo_cam/sfm_ws/database.db --match_list_path /workspaces/OnePose_ST/data/demo/sfm_model/outputs_softmax_loftr_loftr/demo_cam/pairs-covis10.txt --match_type pairs
-echo 'Testing point triangulator call'
-colmap point_triangulator --database_path /workspaces/OnePose_ST/data/demo/sfm_model/outputs_softmax_loftr_loftr/demo_cam/sfm_ws/database.db --image_path / --input_path /workspaces/OnePose_ST/data/demo/sfm_model/outputs_softmax_loftr_loftr/demo_cam/sfm_empty --output_path /workspaces/OnePose_ST/data/demo/sfm_model/outputs_softmax_loftr_loftr/demo_cam/sfm_ws/model --Mapper.ba_refine_focal_length 0 --Mapper.ba_refine_principal_point 0 --Mapper.ba_refine_extra_params 0
