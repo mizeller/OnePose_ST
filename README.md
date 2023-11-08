@@ -1,54 +1,73 @@
-# OnePose++: Keypoint-Free One-Shot Object Pose Estimation without CAD Models
-> This is a slightly modified fork of the original OnePose++ repository to handle our own synthetic data. 
-> 
-> For more information about the dataset and how it was created check out this repo: [Monocular Pose Estimation Pipeline for Boston Dynamic's Spot](https://github.com/mizeller/Monocluar-Pose-Estimation-Pipeline-for-Spot)
+# Spot Pose Estimation
 
-## Installation
+## Hey!
+This is a slightly modified fork of the original OnePose++ repository to handle our own synthetic data. 
+
+For more information about the dataset and how it was created check out this repo: [Monocular Pose Estimation Pipeline for Boston Dynamic's Spot](https://github.com/mizeller/Monocluar-Pose-Estimation-Pipeline-for-Spot)
+
+Since quite some effort went into setting up a working-environment, and to simplify collaboration on this project, we compiled a working docker container. 
+
+## Set-Up
 
 ```shell
-conda create --name oneposeplus -y python=3.7
-conda activate oneposeplus
-pip install -r requirements.txt
-```
+# clone/enter repository
+git clone git@github.com:mizeller/OnePose_ST.git
+cd OnePose_ST
+REPO_ROOT=$(pwd)
 
-[LoFTR](https://github.com/zju3dv/LoFTR) and [DeepLM](https://github.com/hjwdzh/DeepLM) are used in this project. Thanks for their great work, and we appreciate their contribution to the community. Please follow their installation instructions and LICENSE:
-```shell
+# init submodules
 git submodule update --init --recursive
-
-# Install DeepLM
-cd submodules/DeepLM
-sh example.sh
-cp ${REPO_ROOT}/backup/deeplm_init_backup.py ${REPO_ROOT}/submodules/DeepLM/__init__.py
 ```
-Note that the efficient optimizer DeepLM is used in our SfM refinement phase. If you face difficulty in installation, do not worry. You can still run the code by using our first-order optimizer, which is a little slower.
-
-[COLMAP](https://colmap.github.io/) is also used in this project for Structure-from-Motion. Please refer to the official [instructions](https://colmap.github.io/install.html) for the installation.
-
-Download the [pretrained models](https://zjueducn-my.sharepoint.com/:f:/g/personal/12121064_zju_edu_cn/EhRhr5PMG-ZLkQjClFCUYhIB_6-307bBmepX_5Cej4Z_wg?e=tSNHMn), including our 2D-3D matching and LoFTR models. Then move them to `${REPO_ROOT}/weights`.
+Download the [pretrained models](https://zjueducn-my.sharepoint.com/:f:/g/personal/12121064_zju_edu_cn/EhRhr5PMG-ZLkQjClFCUYhIB_6-307bBmepX_5Cej4Z_wg?e=tSNHMn) and the [demo data](https://zjueducn-my.sharepoint.com/personal/12121064_zju_edu_cn/_layouts/15/onedrive.aspx?id=%2Fpersonal%2F12121064_zju_edu_cn%2FDocuments%2Fdemo_data&ga=1).
 
 
-## Demo
-After the installation, you can refer to [this page](doc/demo.md) to run the demo with your custom data.
+```shell
+# unzip the demo data
+mkdir ${REPO_ROOT}/data/demo
+unzip <path/to/demo_cam.zip> -d ${REPO_ROOT}/data/demo
+
+# unzip the pretrained models
+mkdir ${REPO_ROOT}/weight
+unzip  -j <path/to/pretrained_model.zip> -d ${REPO_ROOT}/weight
+
+# and finally 
+docker build -t="spot_pose_estimation:00" .
+```
+<details>
+
+<summary>Hardware Specifications</summary>
+
+This set up was tested and ran succesfully on a machine with the following specifications:
+
+- DISTRIB_DESCRIPTION="Ubuntu 20.04.6 LTS"
+- NVIDIA-SMI (Driver Versions) 470.223.02   
+- CUDA Version: 11.4
+- Docker version 24.0.7, build afdd53b
+
+</details>
 
 
+## DEMO
+In this section the previous installation should be tested. 
 
-## Alternatively using DOCKER
-1. `docker pull ghcr.io/cvg/spot_pose_estimation:hermann` 
-2. *[CMD+SHIFT+P] Dev Containers: Rebuild Container*
-This should re-launch the current repo in a dev container, which 
+First launch the docker container OR start a dev container.
+```shell
+docker run --gpus all -w /workspaces/OnePose_ST -v ${REPO_ROOT}:/workspaces/OnePose_ST -it spot_pose_estimation:00
+```
+OR
+```
+CTRL+SHIFT+P
+Dev Containers: Rebuild and Reopen in Container 
+```
+This should automatically mount the `${REPO_ROOT}` in the container. 
 
+Then run the demo script
+```shell
+bash scripts/demo_pipeline.sh demo_cam
+```
+
+You can also use the built-in VSCode debugger to follow the demo pipeline step by step. (Or modify/extend the `launch.json` to your liking.)
 
 ## Acknowledgement
-This is a fork of the original OnePose++ repository - for more details, have a look at the original source [here](https://github.com/zju3dv/OnePose_Plus_Plus). Thanks to the original authors for their great work!
-
-If you find this repo useful, please consider citing their paper using the following BibTeX entry.
-
-```bibtex
-@inproceedings{
-    he2022oneposeplusplus,
-    title={OnePose++: Keypoint-Free One-Shot Object Pose Estimation without {CAD} Models},
-    author={Xingyi He and Jiaming Sun and Yuang Wang and Di Huang and Hujun Bao and Xiaowei Zhou},
-    booktitle={Advances in Neural Information Processing Systems},
-    year={2022}
-}
+This repository is essentially a fork of the original OnePose++ repository - for more details, have a look at the original source [here](https://github.com/zju3dv/OnePose_Plus_Plus). Thanks to the original authors for their great work!
 ```
