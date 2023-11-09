@@ -16,7 +16,8 @@
 				"ms-python.python",
 				"ms-azuretools.vscode-docker",
 				"GitHub.copilot-chat",
-				"ms-python.black-formatter"
+				"ms-python.black-formatter",
+				"cschlosser.doxdocgen"
 			]
 		}
 	}
