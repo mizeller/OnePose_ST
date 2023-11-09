@@ -4,6 +4,7 @@ FROM nvidia/cudagl:11.3.1-devel-ubuntu20.04
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys A4B469963BF863CC
 RUN apt-get update && apt-get install -y \
+    imagemagick \
     tree \
     git \
     cmake \
