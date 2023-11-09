@@ -1,203 +1,30 @@
-from typing import ChainMap
-import ray
-import torch
-import hydra
+from omegaconf.dictconfig import DictConfig
 from tqdm import tqdm
 import os
+import sys
+from omegaconf import DictConfig
+import yaml
+
+# important for DeepLM module, this line should before import torch
+os.environ["TORCH_USE_RTLD_GLOBAL"] = "TRUE"
 import os.path as osp
-from pathlib import Path
+import glob
 import numpy as np
-from loguru import logger
-import math
+import natsort
+import torch
+import cv2
 
-from omegaconf.dictconfig import DictConfig
-
-from src.inference.inference_OnePosePlus import inference_onepose_plus
-from src.utils.ray_utils import ProgressBar, chunks
-
-
-@torch.no_grad()
-def inference(cfg):
-    # Load all test objects
-    data_dirs = cfg.data_dir
-
-    if isinstance(data_dirs, str):
-        # Parse object directory
-        num_val_seq = cfg.num_val_seq
-        exception_obj_name_list = cfg.exception_obj_names
-        top_k_obj = cfg.top_k_obj
-        logger.info(
-            f"Process all objects in directory:{data_dirs}, process: {num_val_seq if num_val_seq is not None else 'all'} sequences"
-        )
-        if num_val_seq is not None:
-            assert num_val_seq != 0
-            num_val_seq = -1 * num_val_seq
-        
-        if "want_seq_id" in cfg:
-            num_val_seq = 0
-            want_seq_id = cfg.want_seq_id
-        else:
-            want_seq_id = None
-
-        object_names = os.listdir(data_dirs)[top_k_obj :]
-        data_dirs_list = []
-
-        if cfg.ids is not None:
-            # Use data ids
-            id2full_name = {name[:4]: name for name in object_names if "-" in name}
-            object_names = [id2full_name[id] for id in cfg.ids if id in id2full_name]
-
-        for object_name in object_names:
-            if "-" not in object_name:
-                continue
-
-            if object_name in exception_obj_name_list:
-                continue
-            sequence_names = sorted(os.listdir(osp.join(data_dirs, object_name)))
-            sequence_names = [
-                sequence_name
-                for sequence_name in sequence_names
-                if ("-" in sequence_name) and ('-demo' not in sequence_name)
-            ][num_val_seq:]
-
-            obj_short_name = object_name.split('-', 2)[1]
-            sequence_ids = [
-                sequence_name.split('-',1)[1]
-                for sequence_name in sequence_names
-                if "-" in sequence_name
-            ][num_val_seq:]
-
-            if want_seq_id is not None:
-                assert str(want_seq_id) in sequence_ids
-                sequence_names = ['-'.join([obj_short_name, str(want_seq_id)])]
-
-            print(sequence_names)
-            data_dirs_list.append(
-                " ".join([osp.join(data_dirs, object_name)] + sequence_names)
-            )
-    else:
-        raise NotImplementedError
-
-    data_dirs = data_dirs_list  # [obj_name]
-
-    if not cfg.use_global_ray:
-        name2metrics = inference_worker(data_dirs, cfg)
-    else:
-        # Init ray
-        if cfg.ray.slurm:
-            ray.init(address=os.environ["ip_head"])
-        else:
-            ray.init(
-                num_cpus=math.ceil(cfg.ray.n_workers * cfg.ray.n_cpus_per_worker),
-                num_gpus=math.ceil(cfg.ray.n_workers * cfg.ray.n_gpus_per_worker),
-                local_mode=cfg.ray.local_mode,
-                ignore_reinit_error=True,
-            )
-        logger.info(f"Use ray for inference, total: {cfg.ray.n_workers} workers")
-
-        pb = ProgressBar(len(data_dirs), "Inference begin...")
-        all_subsets = chunks(data_dirs, math.ceil(len(data_dirs) / cfg.ray.n_workers))
-        sfm_worker_results = [
-            inference_worker_ray_wrapper.remote(subset_data_dirs, cfg, pba=pb.actor, worker_id=id)
-            for id, subset_data_dirs in enumerate(all_subsets)
-        ]
-        pb.print_until_done()
-        results = ray.get(sfm_worker_results)
-        name2metrics = dict(ChainMap(*results))
-    
-    # Parse metrics:
-    gathered_metrics = {}
-    for name, metrics in name2metrics.items():
-        for metric_name, metric in metrics.items():
-            if metric_name not in gathered_metrics:
-                gathered_metrics[metric_name] = [metric]
-            else:
-                gathered_metrics[metric_name].append(metric)
-        
-    # Dump metrics:
-    os.makedirs(cfg.output.txt_dir, exist_ok=True)
-    with open(osp.join(cfg.output.txt_dir, 'metrics.txt'), 'w') as f:
-        for name, metrics in name2metrics.items():
-            f.write(f'{name}: \n')
-            for metric_name, metric in metrics.items():
-                f.write(f"{metric_name}: {metric}  ")
-            f.write('\n ---------------- \n')
-    
-    with open(osp.join(cfg.output.txt_dir, 'metrics.txt'), 'a') as f:
-        for metric_name, metric in gathered_metrics.items():
-            print(f'{metric_name}:')
-            metric_np = np.array(metric)
-            metric_mean = np.mean(metric)
-            print(metric_mean)
-            print('---------------------')
-
-            f.write('Summary: \n')
-            f.writelines(str(metric_mean))
-        
-def inference_worker(data_dirs, cfg, pba=None, worker_id=0):
-    logger.info(
-        f"Worker {worker_id} will process: {[(data_dir.split(' ')[0]).split('/')[-1][:4] for data_dir in data_dirs]}, total: {len(data_dirs)} objects"
-    )
-    data_dirs = tqdm(data_dirs) if pba is None else data_dirs
-
-    obj_name2metrics = {}
-    for data_dir in data_dirs:
-        logger.info(f"Processing {data_dir}.")
-
-        # Load obj name and inference sequences
-        root_dir, sub_dirs = data_dir.split(" ")[0], data_dir.split(" ")[1:]
-        sfm_mapping_sub_dir = '-'.join([sub_dirs[0].split("-")[0], '1'])
-        num_img_in_mapping_seq = len(os.listdir(osp.join(root_dir, sfm_mapping_sub_dir, 'color')))
-        obj_name = root_dir.split("/")[-1]
-        sfm_base_path = cfg.sfm_base_dir
-
-        if "object_detector_method" in cfg:
-            object_detector_method = cfg.object_detector_method
-        else:
-            object_detector_method = 'GT'
-
-        # Get all inference image path
-        all_image_paths = []
-        for sub_dir in sub_dirs:
-
-            if object_detector_method == 'GT':
-                color_dir = osp.join(root_dir, sub_dir, "color")
-            else:
-                raise NotImplementedError
-
-            img_paths = list(Path(color_dir).glob("*.png"))
-            if len(img_paths) == num_img_in_mapping_seq:
-                logger.warning(f"Same num of images in test sequence:{sub_dir}")
-            image_paths = [str(img_path) for img_path in img_paths]
-            all_image_paths += image_paths
-
-        if len(all_image_paths) == 0:
-            logger.info(f"No png image in {root_dir}")
-            if pba is not None:
-                pba.update.remote(1)
-            continue
-
-        sfm_results_dir = osp.join(
-            sfm_base_path,
-            "outputs_"
-            + cfg.match_type
-            + "_"
-            + cfg.network.detection
-            + "_"
-            + cfg.network.matching,
-            obj_name,
-        )
-
-        metrics = inference_onepose_plus(sfm_results_dir, all_image_paths, cfg, use_ray=cfg.use_local_ray, verbose=cfg.verbose)
-        obj_name2metrics[obj_name] = metrics
-        if pba is not None:
-            pba.update.remote(1)
-    
-    return obj_name2metrics
-
-@ray.remote(num_cpus=1)
-def inference_worker_ray_wrapper(*args, **kwargs):
-    return inference_worker(*args, **kwargs)
+import hydra
+# sys.path.append('/OnePose_Plus_Plus_Spot')
+from src.utils import data_utils
+from src.utils import vis_utils
+from src.utils.data_io import read_grayscale
+from src.inference.inference_OnePosePlus import build_model
+from src.utils.metric_utils import ransac_PnP
+from src.datasets.OnePosePlus_inference_dataset import OnePosePlusInferenceDataset
+from src.local_feature_object_detector.local_feature_2D_detector import LocalFeatureObjectDetector
+from demo import get_default_paths
+from run import sfm
 
 
 @hydra.main(config_path="configs/", config_name="config.yaml")
@@ -206,4 +33,76 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+
+    with open('configs/experiment/inference_demo.yaml', 'r') as f:
+        onepose_config = yaml.load(f, Loader=yaml.FullLoader)
+
+    # NOTE: if you find pose estimation results are not good, problem maybe due to the poor object detection at the very beginning of the sequence.
+    # You can set `output_results=True`, the detection results will thus be saved in the `detector_vis` directory in folder of the test sequence.
+    img_list, paths = get_default_paths(
+        {},
+        data_root='/data/SpotRobot',
+        data_dir='/data/SpotRobot/SpotRobot-annotate',
+        sfm_model_dir=
+        '/OnePose_Plus_Plus_Spot/data/demo/spot_model/outputs_softmax_loftr_loftr/SpotRobot',
+    )
+    # img_lists, paths = get_default_paths()
+
+    local_feature_obj_detector = LocalFeatureObjectDetector(
+        sfm_ws_dir=paths["sfm_ws_dir"],
+        output_results=True,
+        detect_save_dir=paths["vis_detector_dir"],
+    )
+    match_2D_3D_model = build_model(onepose_config['model']["OnePosePlus"],
+                                    onepose_config['model']['pretrained_ckpt'])
+    match_2D_3D_model.cuda()
+
+    dataset = OnePosePlusInferenceDataset(
+        paths['sfm_dir'],
+        img_list,
+        load_3d_coarse=True,
+        shape3d=7000,
+        img_pad=False,
+        img_resize=None,
+        df=8,
+        pad=False,
+        load_pose_gt=False,
+        n_images=None,
+        demo_mode=True,
+        preload=True,
+    )
+
+    K, _ = data_utils.get_K(paths["intrin_full_path"])
+    query_image_path = '/data/SpotRobot/SpotRobot-annotate/color/22.png'
+    query_image, query_image_scale, query_image_mask = read_grayscale(
+        query_image_path, resize=dataset.img_resize, pad_to=None, ret_scales=True, ret_pad_mask=True, df=dataset.df)
+    bbox, inp_crop, K_crop = local_feature_obj_detector.detect(query_image, query_image_path, K)
+    print(f"bbox: {bbox}")
+
+    input_data = {
+        "query_image": inp_crop.cuda(),
+        "query_image_path": query_image_path,
+        "descriptors3d_coarse_db": dataset.avg_coarse_descriptors3d[None],
+        "descriptors3d_db": dataset.avg_descriptors3d[None],
+        "keypoints3d": dataset.keypoints3d[None],
+    }
+
+    # Perform keypoint-free 2D-3D matching and then estimate object pose of query image by PnP:
+    with torch.no_grad():
+        match_2D_3D_model(input_data)
+    mkpts_3d = input_data["mkpts_3d_db"].cpu().numpy() # N*3
+    mkpts_query = input_data["mkpts_query_f"].cpu().numpy() # N*2
+    pose_pred, _, inliers, _ = ransac_PnP(K_crop, mkpts_query, mkpts_3d, scale=1000, pnp_reprojection_error=7, img_hw=[512,512], use_pycolmap_ransac=True)
+    print(f"pose_pred: {pose_pred}, inliers: {inliers}")
+    # Visualize:
+    bbox3d = np.loadtxt(paths["bbox3d_path"])
+    vis_utils.save_demo_image(
+        pose_pred,
+        K,
+        image_path=query_image_path,
+        box3d=bbox3d,
+        draw_box=len(inliers) > 20,
+        save_path="outputs/pose_pred.jpg",
+    )
+
