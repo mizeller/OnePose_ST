@@ -184,7 +184,7 @@ def inference(cfg):
             inference_core(cfg, data_root, seq_dir, sfm_model_dir)
 
 
-@hydra.main(config_path="configs/", config_name="config.yaml")
+@hydra.main(version_base=None, config_path="configs/", config_name="config.yaml")
 def main(cfg: DictConfig):
     globals()[cfg.type](cfg)
 
