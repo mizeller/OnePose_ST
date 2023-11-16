@@ -390,7 +390,7 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
     )
 
 
-@hydra.main(config_path="configs/", config_name="config.yaml")
+@hydra.main(version_base=None, config_path="configs/", config_name="config.yaml")
 def main(cfg: DictConfig):
     globals()[cfg.type](cfg)
 

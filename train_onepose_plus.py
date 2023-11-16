@@ -38,7 +38,9 @@ def train(config: DictConfig):
     # config.model.trainer.scaling= _scaling
     config.model.trainer.true_lr = config.model.trainer.canonical_lr * _scaling
 
-    config.model.loss.fine_weight = 0.25 * (config.model.OnePosePlus.loftr_fine.window_size / 5 ) ** 2
+    config.model.loss.fine_weight = (
+        0.25 * (config.model.OnePosePlus.loftr_fine.window_size / 5) ** 2
+    )
 
     # Init PyTorch Lightning model ⚡
     model: LightningModule = hydra.utils.instantiate(config["model"])
@@ -64,7 +66,9 @@ def train(config: DictConfig):
     # Init PyTorch Lightning trainer ⚡
     trainer: Trainer = hydra.utils.instantiate(
         # config["trainer"], callbacks=callbacks, logger=logger, plugins=DDPPlugin(find_unused_parameters=False)
-        config["trainer"], callbacks=callbacks, logger=logger
+        config["trainer"],
+        callbacks=callbacks,
+        logger=logger,
     )
 
     # Send some parameters from config to all lightning loggers
@@ -96,7 +100,7 @@ def train(config: DictConfig):
         return trainer.callback_metrics[optimized_metric]
 
 
-@hydra.main(config_path="configs/", config_name="config.yaml")
+@hydra.main(version_base=None, config_path="configs/", config_name="config.yaml")
 def main(config: DictConfig):
     return train(config)
 

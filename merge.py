@@ -19,7 +19,7 @@ def merge_train_core(
     images,
     annotations,
 ):
-    """ Merge training annotations of different objects"""
+    """Merge training annotations of different objects"""
 
     with open(anno_2d_file, "r") as f:
         annos_2d = json.load(f)
@@ -58,7 +58,7 @@ def merge_val_core(
     last_n_seq_as_test=1,
     downsample=5,
 ):
-    """ Merge validation annotaions of different objects"""
+    """Merge validation annotaions of different objects"""
     obj_root = osp.join(data_dir, name)
     test_seq_paths = get_test_seq_path(obj_root, last_n_seq_as_test=last_n_seq_as_test)
 
@@ -188,7 +188,7 @@ def merge_anno(cfg):
     merge_(cfg, cfg.names, split=cfg.split)
 
 
-@hydra.main(config_path="configs/", config_name="config.yaml")
+@hydra.main(version_base=None, config_path="configs/", config_name="config.yaml")
 def main(cfg):
     globals()[cfg.type](cfg)
 
