@@ -132,6 +132,7 @@ def get_bbox3d(box_path):
 
 
 def parse_box(box_path):
+    # only used for demo data!
     with open(box_path, "r") as f:
         lines = f.readlines()
     data = [float(e) for e in lines[1].strip().split(",")]
@@ -264,6 +265,18 @@ def data_process_anno(data_dir, downsample_rate=1, hw=512):
                     T_ow = np.array(
                         [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
                     )
+                    if POLY:
+                        # NOTE - had to tweak T_ow to get the correct orientation...not sure why
+                        # that was the case for the poly model...
+                        theta = np.radians(45)  # Convert degrees to radians
+                        T_ow = np.array(
+                            [
+                                [np.cos(theta), 0, np.sin(theta), 0],
+                                [0, 1, 0, 0],
+                                [-np.sin(theta), 0, np.cos(theta), 0],
+                                [0, 0, 0, 1],
+                            ]
+                        )
 
                 T_oc = T_wc @ T_ow
                 pose_save_path = osp.join(paths["out_pose_dir"], "{}.txt".format(index))
@@ -323,6 +336,7 @@ def data_process_test(data_dir, downsample_rate=1):
         index += 1
     cap.release()
 
+
 def parse_args():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -337,8 +351,11 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     data_dir = args.scanned_object_path
-    global DEMO
+    global DEMO, POLY
     DEMO = "demo" in data_dir
+    POLY = "poly" in data_dir
+    print(f"POLY: {POLY}")
+
     assert osp.exists(data_dir), f"Scanned object path:{data_dir} not exists!"
 
     seq_dirs = os.listdir(data_dir)
