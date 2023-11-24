@@ -90,6 +90,8 @@ RUN python3 -m pip install --upgrade pip && python3 -m pip install -U \
     loguru \
     h5py
 
+RUN python3 -m pip install ultralytics
+
 ## INSTALL ONEPOSE++ + DEPENDENCIES (python packages/submodules)
 WORKDIR /OnePose_ST
 COPY requirements.txt /OnePose_ST

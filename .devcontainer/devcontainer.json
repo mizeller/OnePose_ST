@@ -2,7 +2,7 @@
 // README at: https://github.com/devcontainers/templates/tree/main/src/docker-existing-dockerfile
 {
 	"name": "Spot Pose Estimation",
-	"image": "spot_pose_estimation:02", // TODO: replace image name
+	"image": "spot_pose_estimation:yolo00", // TODO: replace image name
 	"runArgs": [
 		"--gpus",
 		"all",
