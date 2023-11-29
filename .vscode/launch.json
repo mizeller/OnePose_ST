@@ -14,13 +14,20 @@
             "justMyCode": true,
         },
         {
+            "name": "OnePose++ Inference",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/inference.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
+        {
             "name": "DEMO - STEP 1",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/parse_scanned_data.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            // args for parse_data
             "args": [
                 "--scanned_object_path",
                 "${workspaceFolder}/data/demo/demo_cam",
@@ -50,6 +57,45 @@
                 "+experiment=inference_demo",
                 "data_base_dir=${workspaceFolder}/data/demo/demo_cam demo_cam-test",
                 "sfm_base_dir=${workspaceFolder}/data/demo/demo_cam/sfm_model/outputs_softmax_loftr_loftr/demo_cam"
+            ]
+        },
+        {
+            "name": "SPOT RGB - STEP 1",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/parse_scanned_data.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--scanned_object_path",
+                "${workspaceFolder}/data/spot_rgb",
+            ],
+        },
+        {
+            "name": "SPOT RGB - STEP 2",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/run.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "+preprocess=sfm_demo",
+                "dataset.data_dir=[${workspaceFolder}/data/spot_rgb spot_00-annotate spot_01-annotate spot_02-annotate spot_03-annotate spot_04-annotate spot_05-annotate spot_06-annotate spot_07-annotate spot_08-annotate]",
+                "dataset.outputs_dir=${workspaceFolder}/data/spot_rgb/sfm_model"
+            ]
+        },
+        {
+            // python3 demo.py +experiment="inference_demo" data_base_dir="data/spot_rgb spot_yt-test" sfm_base_dir="data/spot_rgb/sfm_model/outputs_softmax_loftr_loftr/spot_rgb"
+            "name": "SPOT RGB - STEP 3",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/demo.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "+experiment=inference_demo",
+                "data_base_dir=${workspaceFolder}/data/spot_rgb spot_yt-test",
+                "sfm_base_dir=${workspaceFolder}/data/spot_rgb/sfm_model/outputs_softmax_loftr_loftr/spot_rgb"
             ]
         }
     ]

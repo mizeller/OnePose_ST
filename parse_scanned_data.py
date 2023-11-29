@@ -354,7 +354,6 @@ if __name__ == "__main__":
     global DEMO, POLY
     DEMO = "demo" in data_dir
     POLY = "poly" in data_dir
-    print(f"POLY: {POLY}")
 
     assert osp.exists(data_dir), f"Scanned object path:{data_dir} not exists!"
 

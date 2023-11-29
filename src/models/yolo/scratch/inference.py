@@ -4,8 +4,7 @@ from ultralytics import YOLO
 import cv2
 from ultralytics.utils.plotting import (
     Annotator,
-)  # ultralytics.yolo.utils.plotting is deprecated
-
+)
 
 def main():
     # Load a pretrained YOLOv8n model
