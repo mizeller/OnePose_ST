@@ -38,13 +38,13 @@ class CONFIG:
         pad3D: bool = False
 
     def __init__(self):
-        self.project_root: str = "/workspaces/OnePose_ST"
-        self.data_root: str = f"{self.project_root}/data/spot/"
+        self.obj_name: str = "spot" # TODO: change here
+        self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}" 
         # NOTE: there needs to exist a sub-directory called "color_full" in ∀ data_dirs which contain the image sequences.
         #       furthermore, an "instrinsics.txt" with the corresponding camera intrinsics is also required...
-        self.data_dirs: List[str] = ["spot-test"]  # extend list to incl. more data
+        self.data_dirs: List[str] = ["spot-test"]  # TODO: change here
         self.sfm_model_dir: str = (
-            f"{self.data_root}/sfm_model/outputs_softmax_loftr_loftr/spot"
+            f"{self.data_root}/sfm_model/outputs_softmax_loftr_loftr/{self.obj_name}"
         )
         self.datamodule = CONFIG.DATAMODULE()
         self.model: dict = self._get_model()
@@ -78,8 +78,6 @@ def inference_core(seq_dir):
         demo_mode=True,
         preload=True,
     )
-    # NOTE: if you find pose estimation results are not good, problem maybe due to the poor object detection at the very beginning of the sequence.
-    # You can set `output_results=True`, the detection results will thus be saved in the `detector_vis` directory in folder of the test sequence.
     local_feature_obj_detector: LocalFeatureObjectDetector = LocalFeatureObjectDetector(
         sfm_ws_dir=paths["sfm_ws_dir"],
         output_results=True,
@@ -101,6 +99,7 @@ def inference_core(seq_dir):
 
         # Detect object:
         if id == 0:
+            logger.warning(f"Re-Running local feature object detector for frame {id}")
             # Detect object by 2D local feature matching for the first frame:
             _, inp_crop, K_crop = local_feature_obj_detector.detect(
                 query_image, query_image_path, K
@@ -110,6 +109,9 @@ def inference_core(seq_dir):
             previous_frame_pose, inliers = pred_poses[id - 1]
 
             if len(inliers) < 20:
+                logger.warning(
+                    f"Re-Running local feature object detector for frame {id}"
+                )
                 # Consider previous pose estimation failed, reuse local feature object detector:
                 _, inp_crop, K_crop = local_feature_obj_detector.detect(
                     query_image, query_image_path, K
@@ -139,7 +141,7 @@ def inference_core(seq_dir):
             img_hw=[512, 512],
             use_pycolmap_ransac=True,
         )
-
+        logger.debug(f"Pose estimation inliers: {len(inliers)} for frame {id}")
         pred_poses[id] = [pose_pred, inliers]
 
         # Visualize:
@@ -148,7 +150,7 @@ def inference_core(seq_dir):
             K,
             image_path=query_image_path,
             box3d=bbox3d,
-            draw_box=len(inliers) > 20,
+            draw_box=True,  # len(inliers) > 20,
             save_path=osp.join(paths["vis_box_dir"], f"{id}.jpg"),
         )
 
@@ -162,7 +164,7 @@ def main() -> None:
     for test_dir in tqdm(cfg.data_dirs, total=len(cfg.data_dirs)):
         seq_dir = osp.join(cfg.data_root, test_dir)
         logger.info(f"Eval {seq_dir}")
-        inference_core(cfg, seq_dir)
+        inference_core(seq_dir)
 
     logger.info("Done")
 
