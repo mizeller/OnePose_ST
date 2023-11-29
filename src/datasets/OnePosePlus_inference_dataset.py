@@ -20,7 +20,7 @@ class OnePosePlusInferenceDataset(Dataset):
         df=8,
         pad=True,
         load_pose_gt=True,
-        coarse_scale=1/8,
+        coarse_scale=1 / 8,
         n_images=None,  # Used for debug
         demo_mode=False,
         preload=False,
@@ -35,7 +35,7 @@ class OnePosePlusInferenceDataset(Dataset):
             if n_images is not None
             else image_paths
         )
-        logger.info(f'Will process:{len(self.image_paths)} images ')
+        logger.info(f"Will process:{len(self.image_paths)} images ")
         self.img_pad = img_pad
         self.img_resize = img_resize
         self.df = df
@@ -54,9 +54,26 @@ class OnePosePlusInferenceDataset(Dataset):
             avg_anno_3d_path, pad=self.pad, load_3d_coarse=load_3d_coarse
         )
 
+        if False: # DBG (visualize 3D keypoints, i.e. pointcloud)
+            import open3d as o3d
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(self.keypoints3d.numpy())
+            o3d.io.write_point_cloud("temp/3d_keypoints.ply", pcd)
+
         # Preload 3D features to cuda:
         if preload:
-            self.keypoints3d, self.avg_descriptors3d, self.avg_coarse_descriptors3d = map(lambda x: x.cuda(), [self.keypoints3d, self.avg_descriptors3d, self.avg_coarse_descriptors3d])
+            (
+                self.keypoints3d,
+                self.avg_descriptors3d,
+                self.avg_coarse_descriptors3d,
+            ) = map(
+                lambda x: x.cuda(),
+                [
+                    self.keypoints3d,
+                    self.avg_descriptors3d,
+                    self.avg_coarse_descriptors3d,
+                ],
+            )
 
     def get_default_paths(self, sfm_model_dir):
         anno_dir = osp.join(sfm_model_dir, f"anno")
@@ -69,18 +86,20 @@ class OnePosePlusInferenceDataset(Dataset):
         object_2D_detector = "GT"
         if "_" in image_dir_name and "_full" not in image_dir_name:
             object_2D_detector = image_dir_name.split("_", 1)[1]
-        
+
         if object_2D_detector == "GT":
-            intrin_name = 'intrin_ba'
-        elif object_2D_detector == 'SPP+SPG':
-            intrin_name = 'intrin_SPP+SPG'
+            intrin_name = "intrin_ba"
+        elif object_2D_detector == "SPP+SPG":
+            intrin_name = "intrin_SPP+SPG"
         elif object_2D_detector == "loftr":
-            intrin_name = 'intrin_loftr'
+            intrin_name = "intrin_loftr"
         else:
             raise NotImplementedError
 
         img_ext = osp.splitext(img_path)[1]
-        intrin_path = img_path.replace("/"+image_dir_name+"/", "/"+intrin_name+"/").replace(img_ext, ".txt")
+        intrin_path = img_path.replace(
+            "/" + image_dir_name + "/", "/" + intrin_name + "/"
+        ).replace(img_ext, ".txt")
         assert osp.exists(intrin_path), f"{intrin_path}"
         K_crop = torch.from_numpy(np.loadtxt(intrin_path))  # [3*3]
         return K_crop
@@ -90,10 +109,14 @@ class OnePosePlusInferenceDataset(Dataset):
 
         img_ext = osp.splitext(img_path)[1]
         try:
-            intrin_path = img_path.replace("/"+image_dir_name+"/", "/intrin/").replace(img_ext, ".txt")
+            intrin_path = img_path.replace(
+                "/" + image_dir_name + "/", "/intrin/"
+            ).replace(img_ext, ".txt")
             assert osp.exists(intrin_path), f"{intrin_path}"
         except:
-            intrin_path = img_path.replace("/"+image_dir_name+"/", "/intrin_ba/").replace(img_ext, ".txt")
+            intrin_path = img_path.replace(
+                "/" + image_dir_name + "/", "/intrin_ba/"
+            ).replace(img_ext, ".txt")
             assert osp.exists(intrin_path), f"{intrin_path}"
         K = torch.from_numpy(np.loadtxt(intrin_path))  # [3*3]
         return K
@@ -101,15 +124,15 @@ class OnePosePlusInferenceDataset(Dataset):
     def get_gt_pose_by_color_pth(self, img_path):
         image_dir_name = osp.basename(osp.dirname(img_path))
         img_ext = osp.splitext(img_path)[1]
-        gt_pose_path = img_path.replace("/" + image_dir_name + "/", "/poses_ba/").replace(img_ext, ".txt")
+        gt_pose_path = img_path.replace(
+            "/" + image_dir_name + "/", "/poses_ba/"
+        ).replace(img_ext, ".txt")
         assert osp.exists(gt_pose_path), f"{gt_pose_path}"
         pose_gt = torch.from_numpy(np.loadtxt(gt_pose_path))  # [4*4]
         return pose_gt
 
-    def read_anno3d(
-        self, avg_anno3d_file, pad=True, load_3d_coarse=True
-    ):
-        """ Read(and pad) 3d info"""
+    def read_anno3d(self, avg_anno3d_file, pad=True, load_3d_coarse=True):
+        """Read(and pad) 3d info"""
         avg_data = np.load(avg_anno3d_file)
 
         keypoints3d = torch.Tensor(avg_data["keypoints3d"])  # [m, 3]
@@ -134,10 +157,14 @@ class OnePosePlusInferenceDataset(Dataset):
             avg_coarse_descriptors3d = None
 
         if pad:
-            (keypoints3d, padding_index,) = data_utils.pad_keypoints3d_random(
-                keypoints3d, self.shape3d
-            )
-            (avg_descriptors3d, avg_scores,) = data_utils.pad_features3d_random(
+            (
+                keypoints3d,
+                padding_index,
+            ) = data_utils.pad_keypoints3d_random(keypoints3d, self.shape3d)
+            (
+                avg_descriptors3d,
+                avg_scores,
+            ) = data_utils.pad_features3d_random(
                 avg_descriptors3d, avg_scores, self.shape3d, padding_index
             )
 
@@ -176,14 +203,18 @@ class OnePosePlusInferenceDataset(Dataset):
         self.h_origin = query_img.shape[1] * query_img_scale[0]
         self.w_origin = query_img.shape[2] * query_img_scale[1]
         self.query_img_scale = query_img_scale
-        
+
         image_dir_name = osp.basename(osp.dirname(image_path))
         data = {}
 
         if self.avg_coarse_descriptors3d is not None:
-            data.update({
-                "descriptors3d_coarse_db": self.avg_coarse_descriptors3d[None],  # [1, dim, n2]
-            })
+            data.update(
+                {
+                    "descriptors3d_coarse_db": self.avg_coarse_descriptors3d[
+                        None
+                    ],  # [1, dim, n2]
+                }
+            )
 
         if not self.demo_mode:
             K_crop = self.get_intrin_by_color_pth(image_path)
@@ -196,7 +227,9 @@ class OnePosePlusInferenceDataset(Dataset):
                     "query_image_scale": query_img_scale[None],  # [2]
                     "query_image_path": image_path,
                     "query_intrinsic": K_crop[None],
-                    "query_intrinsic_origin": K[None] # NOTE: only used by linemod dataset
+                    "query_intrinsic_origin": K[
+                        None
+                    ],  # NOTE: only used by linemod dataset
                 }
             )
 
@@ -205,9 +238,7 @@ class OnePosePlusInferenceDataset(Dataset):
 
             if self.load_pose_gt:
                 pose_gt = self.get_gt_pose_by_color_pth(image_path)
-                data.update(
-                    {"query_pose_gt": pose_gt[None]}
-                )
+                data.update({"query_pose_gt": pose_gt[None]})
 
         else:
             data.update(
