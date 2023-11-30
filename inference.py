@@ -38,11 +38,11 @@ class CONFIG:
         pad3D: bool = False
 
     def __init__(self):
-        self.obj_name: str = "spot" # TODO: change here
-        self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}" 
+        self.obj_name: str = "spot_rgb"  # TODO: change here
+        self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}"
         # NOTE: there needs to exist a sub-directory called "color_full" in ∀ data_dirs which contain the image sequences.
         #       furthermore, an "instrinsics.txt" with the corresponding camera intrinsics is also required...
-        self.data_dirs: List[str] = ["spot-test"]  # TODO: change here
+        self.data_dirs: List[str] = ["spot_yt-test"]  # TODO: change here
         self.sfm_model_dir: str = (
             f"{self.data_root}/sfm_model/outputs_softmax_loftr_loftr/{self.obj_name}"
         )
@@ -88,7 +88,7 @@ def inference_core(seq_dir):
     )
     match_2D_3D_model.cuda()
 
-    K, _ = data_utils.get_K(paths["intrin_full_path"])
+    K, _ = data_utils.get_K(intrin_file=paths["intrin_full_path"])
 
     bbox3d = np.loadtxt(paths["bbox3d_path"])
     pred_poses = {}  # {id:[pred_pose, inliers]}
@@ -96,6 +96,10 @@ def inference_core(seq_dir):
         data = dataset[id]
         query_image = data["query_image"]
         query_image_path = data["query_image_path"]
+
+        if K is None:
+            # TODO: reset K to None for each frame if necessary
+            K = data_utils.infer_K(img_path=query_image_path)
 
         # Detect object:
         if id == 0:

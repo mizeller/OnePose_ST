@@ -2,6 +2,9 @@ import cv2
 import torch
 import numpy as np
 from pathlib import Path
+import math
+from loguru import logger
+from .calib import demo
 
 
 def get_3rd_point(a, b):
@@ -52,7 +55,6 @@ def get_affine_transform(
     return trans
 
 
-
 def pad_features(features, num_leaf):
     num_features = features.shape[0]
     feature_dim = features.shape[1]
@@ -91,7 +93,7 @@ def avg_scores(scores):
 
 
 def pad_keypoints3d_top_n(keypoints, n_target_kpts):
-    """ Pad or truncate orig 3d keypoints to fixed size."""
+    """Pad or truncate orig 3d keypoints to fixed size."""
     n_pad = n_target_kpts - keypoints.shape[0]
 
     if n_pad < 0:
@@ -115,8 +117,9 @@ def pad_keypoints3d_top_n(keypoints, n_target_kpts):
 
     return keypoints
 
+
 def pad_keypoints3d_according_to_assignmatrix(keypoints, n_target_kpts, assignmatrix):
-    """ Pad or truncate orig 3d keypoints to fixed size."""
+    """Pad or truncate orig 3d keypoints to fixed size."""
     # assignmatrix: [2, N]
     n_pad = n_target_kpts - keypoints.shape[0]
 
@@ -178,7 +181,7 @@ def pad_keypoints3d_according_to_assignmatrix(keypoints, n_target_kpts, assignma
 
 
 def pad_features3d_top_n(descriptors, scores, n_target_shape):
-    """ Pad or truncate orig 3d feature(descriptors and scores) to fixed size."""
+    """Pad or truncate orig 3d feature(descriptors and scores) to fixed size."""
     dim = descriptors.shape[0]
     n_pad = n_target_shape - descriptors.shape[1]
 
@@ -195,7 +198,7 @@ def pad_features3d_top_n(descriptors, scores, n_target_shape):
 def pad_features3d_according_to_assignmatrix(
     descriptors, scores, n_target_shape, padding_index
 ):
-    """ Pad or truncate orig 3d feature(descriptors and scores) to fixed size."""
+    """Pad or truncate orig 3d feature(descriptors and scores) to fixed size."""
     dim = descriptors.shape[0]
     n_pad = n_target_shape - descriptors.shape[1]
 
@@ -210,7 +213,7 @@ def pad_features3d_according_to_assignmatrix(
 
 
 def pad_keypoints3d_random(keypoints, n_target_kpts):
-    """ Pad or truncate orig 3d keypoints to fixed size."""
+    """Pad or truncate orig 3d keypoints to fixed size."""
     # NOTE: For val
     n_pad = n_target_kpts - keypoints.shape[0]
 
@@ -222,10 +225,9 @@ def pad_keypoints3d_random(keypoints, n_target_kpts):
 
     return keypoints, selected_index
 
-def pad_features3d_random(
-    descriptors, scores, n_target_shape, padding_index
-):
-    """ Pad or truncate orig 3d feature(descriptors and scores) to fixed size."""
+
+def pad_features3d_random(descriptors, scores, n_target_shape, padding_index):
+    """Pad or truncate orig 3d feature(descriptors and scores) to fixed size."""
     # NOTE: For val
     dim = descriptors.shape[0]
     n_pad = n_target_shape - descriptors.shape[1]
@@ -235,6 +237,7 @@ def pad_features3d_random(
         scores = scores[padding_index, :]
 
     return descriptors, scores
+
 
 def get_image_crop_resize(image, box, resize_shape):
     """Crop image according to the box, and resize the cropped image to resize_shape
@@ -256,7 +259,7 @@ def get_image_crop_resize(image, box, resize_shape):
 
 
 def get_K_crop_resize(box, K_orig, resize_shape):
-    """Update K (crop an image according to the box, and resize the cropped image to resize_shape) 
+    """Update K (crop an image according to the box, and resize the cropped image to resize_shape)
     @param box: [x0, y0, x1, y1]
     @param K_orig: [3, 3] or [3, 4]
     @resize_shape: [h, w]
@@ -279,21 +282,55 @@ def get_K_crop_resize(box, K_orig, resize_shape):
 
     return K_crop, K_crop_homo
 
-def get_K(intrin_file):
-    assert Path(intrin_file).exists()
-    with open(intrin_file, 'r') as f:
-        lines = f.readlines()
-    intrin_data = [line.rstrip('\n').split(':')[1] for line in lines]
-    fx, fy, cx, cy = list(map(float, intrin_data))
 
-    K = np.array([
-        [fx, 0, cx],
-        [0, fy, cy],
-        [0,  0,  1]
-    ])
-    K_homo = np.array([
-        [fx, 0, cx, 0],
-        [0, fy, cy, 0],
-        [0,  0,  1, 0]
-    ])
+def infer_K(img_path: str):
+    """
+    In case the camera intrinsics matrix is not defined, infer it from the image.
+    Using: https://github.com/AlanSavio25/DeepSingleImageCalibration/
+
+    NOTE: currently K is infered for each frame of a video, which is kind of inefficient.
+          the underlying assumption (after watching some youtube videos) is that in one yt video different cameras can be used.
+          thus, K is infered for each frame. performance can be optimised for at a later stage..
+    """
+    logger.info(f"Computing K for {img_path}")
+
+    model: demo.DeepCalibration = torch.hub.load(
+        "AlanSavio25/DeepSingleImageCalibration",
+        "DeepCalibration",
+        force_reload=False,
+    )
+
+    ret = model.calibrate_from_path(image_path=img_path)
+    focal_length_pixels = ret["focal_length_pixels"]
+    height = ret["height"]
+    width = ret["width"]
+    pitch = ret["pitch"]
+    vertical_fov = ret["vertical_fov"]
+
+    # Calculate the focal length in y direction (f_y) using vertical FOV
+    focal_length_y = height / (2 * math.tan(math.radians(vertical_fov / 2)))
+
+    # Calculate the optical center (c_x, c_y)
+    c_x = width / 2
+    c_y = height / 2
+
+    # Create the camera intrinsic matrix
+    K = np.array([[focal_length_pixels, 0, c_x], [0, focal_length_y, c_y], [0, 0, 1]])
+
+    # K_homo = np.array(
+    #     [[focal_length_pixels, 0, c_x, 0], [0, focal_length_y, c_y, 0], [0, 0, 1, 0]]
+    # )
+    return K  # , K_homo
+
+
+def get_K(intrin_file):
+    K, K_homo = None, None
+    if Path(intrin_file).exists():
+        with open(intrin_file, "r") as f:
+            lines = f.readlines()
+        intrin_data = [line.rstrip("\n").split(":")[1] for line in lines]
+        fx, fy, cx, cy = list(map(float, intrin_data))
+
+        K = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
+        K_homo = np.array([[fx, 0, cx, 0], [0, fy, cy, 0], [0, 0, 1, 0]])
     return K, K_homo

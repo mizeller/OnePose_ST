@@ -1,0 +1,47 @@
+data:
+  name: calibration_dataset 
+  data_dir: calibration_dataset/
+  train_split: split/train_data.txt
+  val_split: split/val_data.txt
+  test_split: split/test_data.txt
+  num_workers: 24
+  seed: 1
+  train_batch_size: 32
+  val_batch_size: 1
+  test_batch_size: 1
+  batch_size: 1
+  augment: true
+  resize_method: simple #or letterbox
+model:
+  name: densenet
+  model: densenet161
+  heads: # Options: roll, rho, hfov, vfov, k1_hat
+  - roll
+  - rho
+  - vfov
+#   - hfov
+  - k1_hat
+  normalize_features: true
+  duplicate_optimizer_per_scale: true
+  normalize_dt: false
+  loss: NLL # L1, L2, Huber, NLL
+  num_bins: 256
+train:
+  seed: 0
+  load_experiment:
+  epochs: 12
+  log_every_iter: 20
+  eval_every_iter: 3000
+  lr: 1.0e-04
+  clip_grad: 1.0
+  median_metrics:
+  - loss/total # this loss is computed directly on the outputs of the networks
+#   - roll/L1_degree_loss
+#   - rho/L1_pitch_degree_loss
+#   - fov/L1_degree_loss
+  q90_metrics:
+  - loss/total
+#   - roll/L1_degree_loss
+#   - rho/L1_pitch_degree_loss
+#   - fov/L1_degree_loss
+ 
