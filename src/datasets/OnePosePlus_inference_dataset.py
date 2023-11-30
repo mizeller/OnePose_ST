@@ -7,6 +7,8 @@ from torch.utils.data import Dataset
 
 from src.utils.data_io import read_grayscale
 from src.utils import data_utils
+from src.utils import vis_utils
+
 
 class OnePosePlusInferenceDataset(Dataset):
     def __init__(
@@ -53,12 +55,6 @@ class OnePosePlusInferenceDataset(Dataset):
         ) = self.read_anno3d(
             avg_anno_3d_path, pad=self.pad, load_3d_coarse=load_3d_coarse
         )
-
-        if False: # DBG (visualize 3D keypoints, i.e. pointcloud)
-            import open3d as o3d
-            pcd = o3d.geometry.PointCloud()
-            pcd.points = o3d.utility.Vector3dVector(self.keypoints3d.numpy())
-            o3d.io.write_point_cloud("temp/3d_keypoints.ply", pcd)
 
         # Preload 3D features to cuda:
         if preload:
@@ -136,9 +132,13 @@ class OnePosePlusInferenceDataset(Dataset):
         avg_data = np.load(avg_anno3d_file)
 
         keypoints3d = torch.Tensor(avg_data["keypoints3d"])  # [m, 3]
+        if True:  # DBG
+            vis_utils.visualize_pointcloud(
+                npz_file=avg_anno3d_coarse_file, v="avg_anno3d"
+            )
+
         avg_descriptors3d = torch.Tensor(avg_data["descriptors3d"])  # [dim, m]
         avg_scores = torch.Tensor(avg_data["scores3d"])  # [m, 1]
-
         num_3d_orig = keypoints3d.shape[0]
 
         if load_3d_coarse:
@@ -151,6 +151,11 @@ class OnePosePlusInferenceDataset(Dataset):
             avg_coarse_descriptors3d = torch.Tensor(
                 avg_coarse_data["descriptors3d"]
             )  # [dim, m]
+            if True:  # DBG
+                vis_utils.visualize_pointcloud(
+                    npz_file=avg_anno3d_coarse_file, v="avg_ann3d_coarse"
+                )
+
             avg_coarse_scores = torch.Tensor(avg_coarse_data["scores3d"])  # [m, 1]
 
         else:

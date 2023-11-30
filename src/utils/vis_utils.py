@@ -6,6 +6,8 @@ import natsort
 import os
 from loguru import logger
 from wis3d import Wis3D as Vis3D
+import open3d as o3d
+
 
 def reproj(K, pose, pts_3d):
     """
@@ -35,6 +37,7 @@ def reproj(K, pose, pts_3d):
     reproj_points = reproj_points[:] / reproj_points[2:]
     reproj_points = reproj_points[:2, :].T
     return reproj_points  # [n, 2]
+
 
 def draw_3d_box(image, corners_2d, linewidth=3, color="g"):
     """Draw 3d box corners
@@ -75,13 +78,34 @@ def draw_2d_box(image, corners_2d, linewidth=3):
         cv2.line(image, pt1, pt2, (0, 0, 255), linewidth)
 
 
+def visualize_pointcloud(
+    npz_file: str, tensor: torch.Tensor = None, v: str = ""
+) -> None:
+    """Given an npz file extract and save the pointcloud as a ply file in temp/
+    Alternatively: provide the list of 3d points as a torch tensor [m, 3] and add a version/uuid to the filename
+    """
+    if tensor:
+        keypoints3d = tensor
+    else:
+        assert Path(npz_file).exists(), f"{npz_file} does not exist"
+        avg_data = np.load(npz_file)
+        keypoints3d = torch.Tensor(avg_data["keypoints3d"])  # [m, 3]
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(keypoints3d.numpy())
+
+    path: str = f"temp/3d_keypoints_{v}.ply" if v else f"temp/3d_keypoints.ply"
+    logger.info(f"Saving pointcloud to {path}")
+    o3d.io.write_point_cloud(path, pcd)
+    return
+
+
 def add_pointcloud_to_vis3d(pointcloud_pth, dump_dir, save_name):
     vis3d = Vis3D(dump_dir, save_name)
     vis3d.add_point_cloud(pointcloud_pth, name="filtered_pointcloud")
 
 
 def save_demo_image(pose_pred, K, image_path, box3d, draw_box=True, save_path=None):
-    """ 
+    """
     Project 3D bbox by predicted pose and visualize
     """
     if isinstance(box3d, str):
@@ -91,23 +115,24 @@ def save_demo_image(pose_pred, K, image_path, box3d, draw_box=True, save_path=No
 
     if draw_box:
         reproj_box_2d = reproj(K, pose_pred, box3d)
-        draw_3d_box(image_full, reproj_box_2d, color='b', linewidth=10)
-    
+        draw_3d_box(image_full, reproj_box_2d, color="b", linewidth=10)
+
     if save_path is not None:
         Path(save_path).parent.mkdir(exist_ok=True, parents=True)
 
         cv2.imwrite(save_path, image_full)
     return image_full
 
+
 def make_video(image_path, output_video_path):
     # Generate video:
     images = natsort.natsorted(os.listdir(image_path))
     Path(output_video_path).parent.mkdir(parents=True, exist_ok=True)
-    H, W, C = cv2.imread(str(Path(image_path) /images[0])).shape
+    H, W, C = cv2.imread(str(Path(image_path) / images[0])).shape
     if Path(output_video_path).exists():
         Path(output_video_path).unlink()
-    
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     video = cv2.VideoWriter(output_video_path, fourcc, 24, (W, H))
     for id, image_name in enumerate(images):
         image = cv2.imread(str(Path(image_path) / image_name))
