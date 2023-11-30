@@ -16,20 +16,21 @@ class OnePosePlusInferenceDataset(Dataset):
         sfm_dir,
         image_paths,
         shape3d,
-        load_3d_coarse=True,  # no-longer used. leave it for compatibility w/ demo script
         img_pad=False,
         img_resize=512,
         df=8,
         pad=True,
-        load_pose_gt=True,
-        coarse_scale=1 / 8,
         n_images=None,  # Used for debug
-        demo_mode=False,
-        preload=False,
+        DBG: bool = False,
+        # keep this attributes for legacy/compatibiliby reasons with demo.py
+        load_pose_gt: bool = True,
+        coarse_scale: float = 1 / 8,
+        demo_mode: bool = False,
+        load_3d_coarse: bool = True,
+        preload: bool = False,
     ) -> None:
         super().__init__()
-
-        self.demo_mode = demo_mode
+        self.DBG = DBG
         self.shape3d = shape3d
         self.pad = pad
         self.image_paths = (
@@ -41,8 +42,6 @@ class OnePosePlusInferenceDataset(Dataset):
         self.img_pad = img_pad
         self.img_resize = img_resize
         self.df = df
-        self.load_pose_gt = load_pose_gt
-        self.coarse_scale = coarse_scale
 
         # Load pointcloud and point feature
         avg_anno_3d_path = self.get_default_paths(sfm_dir)
@@ -53,21 +52,6 @@ class OnePosePlusInferenceDataset(Dataset):
             self.avg_scores3d,
             self.num_3d_orig,
         ) = self.read_anno3d(avg_anno_3d_path, pad=self.pad)
-
-        # Preload 3D features to cuda:
-        if preload:
-            (
-                self.keypoints3d,
-                self.avg_descriptors3d,
-                self.avg_coarse_descriptors3d,
-            ) = map(
-                lambda x: x.cuda(),
-                [
-                    self.keypoints3d,
-                    self.avg_descriptors3d,
-                    self.avg_coarse_descriptors3d,
-                ],
-            )
 
     def get_default_paths(self, sfm_model_dir):
         anno_dir = osp.join(sfm_model_dir, f"anno")
@@ -130,7 +114,7 @@ class OnePosePlusInferenceDataset(Dataset):
         avg_data = np.load(avg_anno3d_file)
 
         keypoints3d = torch.Tensor(avg_data["keypoints3d"])  # [m, 3]
-        if True:  # DBG
+        if self.DBG:
             vis_utils.visualize_pointcloud(npz_file=avg_anno3d_file, v="avg_anno3d")
 
         avg_descriptors3d = torch.Tensor(avg_data["descriptors3d"])  # [dim, m]
@@ -146,7 +130,7 @@ class OnePosePlusInferenceDataset(Dataset):
         avg_coarse_descriptors3d = torch.Tensor(
             avg_coarse_data["descriptors3d"]
         )  # [dim, m]
-        if True:  # DBG
+        if self.DBG:
             vis_utils.visualize_pointcloud(
                 npz_file=avg_anno3d_coarse_file, v="avg_ann3d_coarse"
             )
@@ -174,6 +158,20 @@ class OnePosePlusInferenceDataset(Dataset):
                 self.shape3d,
                 padding_index,
             )
+
+        # Preload 3D features to cuda:
+        (
+            keypoints3d,
+            avg_descriptors3d,
+            avg_coarse_descriptors3d,
+        ) = map(
+            lambda x: x.cuda(),
+            [
+                keypoints3d,
+                avg_descriptors3d,
+                avg_coarse_descriptors3d,
+            ],
+        )
 
         return (
             keypoints3d,
@@ -212,38 +210,13 @@ class OnePosePlusInferenceDataset(Dataset):
                 }
             )
 
-        if not self.demo_mode:
-            K_crop = self.get_intrin_by_color_pth(image_path)
-            K = self.get_intrin_original_by_color_pth(image_path)
-            data.update(
-                {
-                    "keypoints3d": self.keypoints3d[None],  # [1, n2, 3]
-                    "descriptors3d_db": self.avg_descriptors3d[None],  # [1, dim, n2]
-                    "query_image": query_img[None],  # [1*h*w]
-                    "query_image_scale": query_img_scale[None],  # [2]
-                    "query_image_path": image_path,
-                    "query_intrinsic": K_crop[None],
-                    "query_intrinsic_origin": K[
-                        None
-                    ],  # NOTE: only used by linemod dataset
-                }
-            )
-
-            if query_img_mask is not None:
-                data.update({"query_image_mask": query_img_mask[None]})  # [h*w]
-
-            if self.load_pose_gt:
-                pose_gt = self.get_gt_pose_by_color_pth(image_path)
-                data.update({"query_pose_gt": pose_gt[None]})
-
-        else:
-            data.update(
-                {
-                    "keypoints3d": self.keypoints3d[None],  # [1, n2, 3]
-                    "descriptors3d_db": self.avg_descriptors3d[None],  # [1, dim, n2]
-                    "query_image": query_img[None],  # [1*h*w]
-                    "query_image_path": image_path,
-                }
-            )
+        data.update(
+            {
+                "keypoints3d": self.keypoints3d[None],  # [1, n2, 3]
+                "descriptors3d_db": self.avg_descriptors3d[None],  # [1, dim, n2]
+                "query_image": query_img[None],  # [1*h*w]
+                "query_image_path": image_path,
+            }
+        )
 
         return data

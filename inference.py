@@ -31,10 +31,12 @@ from src.local_feature_object_detector.local_feature_2D_detector import (
 class CONFIG:
     class DATAMODULE:
         # this class will never be used outside of the CONFIG scope
-        shape3d_val: int = 7000
         img_pad: bool = False
         df: int = 8
-        pad3D: bool = False
+        pad3D: bool = (
+            False  # if True: pad 3D point cloud to shape3d_val else: use all points
+        )
+        shape3d_val: int = 7000  # #points in 3D point cloud; only used if pad3D is True
 
     def __init__(self):
         self.obj_name: str = "spot_rgb"  # TODO: change here
@@ -71,10 +73,8 @@ def inference_core(seq_dir):
         img_resize=None,
         df=cfg.datamodule.df,
         pad=cfg.datamodule.pad3D,
-        load_pose_gt=False,
         n_images=3,  # DBG - only use 3 images for now...
-        demo_mode=True,
-        preload=True,
+        DBG=False,
     )
     local_feature_obj_detector: LocalFeatureObjectDetector = LocalFeatureObjectDetector(
         sfm_ws_dir=paths["sfm_ws_dir"],
