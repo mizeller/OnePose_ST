@@ -16,7 +16,7 @@ class OnePosePlusInferenceDataset(Dataset):
         sfm_dir,
         image_paths,
         shape3d,
-        load_3d_coarse=True,
+        load_3d_coarse=True,  # no-longer used. leave it for compatibility w/ demo script
         img_pad=False,
         img_resize=512,
         df=8,
@@ -52,9 +52,7 @@ class OnePosePlusInferenceDataset(Dataset):
             self.avg_coarse_descriptors3d,
             self.avg_scores3d,
             self.num_3d_orig,
-        ) = self.read_anno3d(
-            avg_anno_3d_path, pad=self.pad, load_3d_coarse=load_3d_coarse
-        )
+        ) = self.read_anno3d(avg_anno_3d_path, pad=self.pad)
 
         # Preload 3D features to cuda:
         if preload:
@@ -127,39 +125,33 @@ class OnePosePlusInferenceDataset(Dataset):
         pose_gt = torch.from_numpy(np.loadtxt(gt_pose_path))  # [4*4]
         return pose_gt
 
-    def read_anno3d(self, avg_anno3d_file, pad=True, load_3d_coarse=True):
+    def read_anno3d(self, avg_anno3d_file, pad=True):
         """Read(and pad) 3d info"""
         avg_data = np.load(avg_anno3d_file)
 
         keypoints3d = torch.Tensor(avg_data["keypoints3d"])  # [m, 3]
         if True:  # DBG
-            vis_utils.visualize_pointcloud(
-                npz_file=avg_anno3d_coarse_file, v="avg_anno3d"
-            )
+            vis_utils.visualize_pointcloud(npz_file=avg_anno3d_file, v="avg_anno3d")
 
         avg_descriptors3d = torch.Tensor(avg_data["descriptors3d"])  # [dim, m]
         avg_scores = torch.Tensor(avg_data["scores3d"])  # [m, 1]
         num_3d_orig = keypoints3d.shape[0]
 
-        if load_3d_coarse:
-            avg_anno3d_coarse_file = (
-                osp.splitext(avg_anno3d_file)[0]
-                + "_coarse"
-                + osp.splitext(avg_anno3d_file)[1]
+        avg_anno3d_coarse_file = (
+            osp.splitext(avg_anno3d_file)[0]
+            + "_coarse"
+            + osp.splitext(avg_anno3d_file)[1]
+        )
+        avg_coarse_data = np.load(avg_anno3d_coarse_file)
+        avg_coarse_descriptors3d = torch.Tensor(
+            avg_coarse_data["descriptors3d"]
+        )  # [dim, m]
+        if True:  # DBG
+            vis_utils.visualize_pointcloud(
+                npz_file=avg_anno3d_coarse_file, v="avg_ann3d_coarse"
             )
-            avg_coarse_data = np.load(avg_anno3d_coarse_file)
-            avg_coarse_descriptors3d = torch.Tensor(
-                avg_coarse_data["descriptors3d"]
-            )  # [dim, m]
-            if True:  # DBG
-                vis_utils.visualize_pointcloud(
-                    npz_file=avg_anno3d_coarse_file, v="avg_ann3d_coarse"
-                )
 
-            avg_coarse_scores = torch.Tensor(avg_coarse_data["scores3d"])  # [m, 1]
-
-        else:
-            avg_coarse_descriptors3d = None
+        avg_coarse_scores = torch.Tensor(avg_coarse_data["scores3d"])  # [m, 1]
 
         if pad:
             (
@@ -173,16 +165,15 @@ class OnePosePlusInferenceDataset(Dataset):
                 avg_descriptors3d, avg_scores, self.shape3d, padding_index
             )
 
-            if avg_coarse_descriptors3d is not None:
-                (
-                    avg_coarse_descriptors3d,
-                    avg_coarse_scores,
-                ) = data_utils.pad_features3d_random(
-                    avg_coarse_descriptors3d,
-                    avg_coarse_scores,
-                    self.shape3d,
-                    padding_index,
-                )
+            (
+                avg_coarse_descriptors3d,
+                avg_coarse_scores,
+            ) = data_utils.pad_features3d_random(
+                avg_coarse_descriptors3d,
+                avg_coarse_scores,
+                self.shape3d,
+                padding_index,
+            )
 
         return (
             keypoints3d,

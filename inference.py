@@ -31,7 +31,6 @@ from src.local_feature_object_detector.local_feature_2D_detector import (
 class CONFIG:
     class DATAMODULE:
         # this class will never be used outside of the CONFIG scope
-        load_3d_coarse: bool = True
         shape3d_val: int = 7000
         img_pad: bool = False
         df: int = 8
@@ -67,7 +66,6 @@ def inference_core(seq_dir):
     dataset = OnePosePlusInferenceDataset(
         paths["sfm_dir"],
         img_list,
-        load_3d_coarse=cfg.datamodule.load_3d_coarse,
         shape3d=cfg.datamodule.shape3d_val,
         img_pad=cfg.datamodule.img_pad,
         img_resize=None,
