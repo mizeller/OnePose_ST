@@ -27,6 +27,7 @@ cfgs = {
     },
 }
 
+
 def build_2D_match_model(args) -> LoFTR_for_OnePose_Plus:
     pl.seed_everything(args["seed"])
 
@@ -92,57 +93,60 @@ class LocalFeatureObjectDetector:
 
     @torch.no_grad()
     def match_worker(self, query, query_img_path: str = ""):
-        logger.info(
-            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-        )
-        logger.info("Extracting relevant area from query image using YOLOv8.")
-        
-        query_id: str = str(uuid.uuid4())[:6] # uuid of current query image
-        
-        model = YOLO("src/models/yolo/spot_model_00.pt")
-        img = cv2.imread(query_img_path, 0)
-        results = model.predict(query_img_path, save=True, stream=True, conf=0.5)
-        height, width = img.shape
-        top, left, bottom, right = (0, 0, height, width)
+        if False:  # DBG
+            logger.info(
+                "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+            )
+            logger.info("Extracting relevant area from query image using YOLOv8.")
 
-        # TODO: merge detected bounding boxes or extract the one w/ max confidence
-        for r in results:
-            annotator = Annotator(img)
-            boxes = r.boxes
-            for box in boxes:
-                b = box.xyxy[
-                    0
-                ]  # get box coordinates in (top, left, bottom, right) format
-                top, left, bottom, right = b
-                left, right = int(left.item()), int(right.item())
-                top, bottom = int(top.item()), int(bottom.item())
-                c = box.cls
-                annotator.box_label(b, model.names[int(c)])
-        img = annotator.result()
-        x_min, y_min = left, top
-        width = right - left
-        height = bottom - top
-        x_max, y_max = x_min + width, y_min + height
-        query_cropped, _ = self.crop_img_by_bbox(
-            query_img_path, [x_min, y_min, x_max, y_max]
-        )
-        # query_cropped = img[y_min : y_min + height, x_min : x_min + width]
+            query_id: str = str(uuid.uuid4())[:6]  # uuid of current query image
+            Path(f"temp/{query_id}").mkdir(parents=True, exist_ok=True)
 
-        cv2.imwrite(f"temp/{query_id}/query_cropped.png", query_cropped)
-        cv2.imwrite(f"temp/{query_id}/query_annotated.png", img)
+            model = YOLO("src/models/yolo/spot_model_00.pt")
+            img = cv2.imread(query_img_path, 0)
+            results = model.predict(query_img_path, save=True, stream=True, conf=0.5)
+            height, width = img.shape
+            top, left, bottom, right = (0, 0, height, width)
 
-        logger.info(
-            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-        )
+            # TODO: merge detected bounding boxes or extract the one w/ max confidence
+            for r in results:
+                annotator = Annotator(img)
+                boxes = r.boxes
+                for box in boxes:
+                    b = box.xyxy[
+                        0
+                    ]  # get box coordinates in (top, left, bottom, right) format
+                    top, left, bottom, right = b
+                    left, right = int(left.item()), int(right.item())
+                    top, bottom = int(top.item()), int(bottom.item())
+                    c = box.cls
+                    annotator.box_label(b, model.names[int(c)])
+            img = annotator.result()
+            x_min, y_min = left, top
+            width = right - left
+            height = bottom - top
+            x_max, y_max = x_min + width, y_min + height
+            query_cropped, _ = self.crop_img_by_bbox(
+                query_img_path, [x_min, y_min, x_max, y_max]
+            )
+            # query_cropped = img[y_min : y_min + height, x_min : x_min + width]
 
-        
+            cv2.imwrite(f"temp/{query_id}/query_cropped.png", query_cropped)
+            cv2.imwrite(f"temp/{query_id}/query_annotated.png", img)
+
+            logger.info(
+                "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+            )
+
         detect_results_dict = {}
-        for idx, db_img in enumerate(self.db_imgs):  # find matches btw query and referece images 
+        for idx, db_img in enumerate(
+            self.db_imgs
+        ):  # find matches btw query and referece images
             match_data = {"image0": db_img.cuda(), "image1": query.cuda()}
             self.matcher(match_data)
             mkpts0 = match_data["mkpts0_f"].cpu().numpy()
             mkpts1 = match_data["mkpts1_f"].cpu().numpy()
-            if True: # DBG
+            if False:  # DBG
                 logger.debug(
                     f"matching features between query image and &db image {idx}"
                 )
@@ -190,8 +194,8 @@ class LocalFeatureObjectDetector:
                     .cuda(),
                 }
                 self.matcher(match_data_cropped)
-                
-                # TODO: the matches need to be mapped to the original file size. 
+
+                # TODO: the matches need to be mapped to the original file size.
                 # reconstruct the position of these keypoints based on the bounding box coordinates...
                 mkpts0_cropped = match_data_cropped["mkpts0_f"].cpu().numpy()
                 mkpts1_cropped = match_data_cropped["mkpts1_f"].cpu().numpy()
@@ -305,7 +309,7 @@ class LocalFeatureObjectDetector:
             K_crop, K_crop_homo = get_K_crop_resize(bbox_new, K_crop, resize_shape)
         image_crop, trans2 = get_image_crop_resize(image_crop, bbox_new, resize_shape)
         return image_crop, K_crop if K is not None else None
-    
+
     def save_detection(self, crop_img, query_img_path):
         if self.output_results and self.detect_save_dir is not None:
             cv2.imwrite(
@@ -343,8 +347,8 @@ class LocalFeatureObjectDetector:
         image_crop, K_crop = self.crop_img_by_bbox(
             query_img_path, bbox, K, crop_size=crop_size
         )
-        
-        if False: # DBG
+
+        if False:  # DBG
             img = (query_img.squeeze().numpy() * 255).astype("uint8")
             name = int(osp.splitext(osp.basename(query_img_path))[0])
             cv2.imwrite(f"temp/{name:03}_query.png", img)
