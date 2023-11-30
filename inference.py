@@ -42,7 +42,7 @@ class CONFIG:
         self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}"
         # NOTE: there needs to exist a sub-directory called "color_full" in ∀ data_dirs which contain the image sequences.
         #       furthermore, an "instrinsics.txt" with the corresponding camera intrinsics is also required...
-        self.data_dirs: List[str] = ["spot_yt-test"]  # TODO: change here
+        self.data_dirs: List[str] = ["spot_yt_cropped-test"]  # TODO: change here
         self.sfm_model_dir: str = (
             f"{self.data_root}/sfm_model/outputs_softmax_loftr_loftr/{self.obj_name}"
         )
@@ -74,7 +74,7 @@ def inference_core(seq_dir):
         df=cfg.datamodule.df,
         pad=cfg.datamodule.pad3D,
         load_pose_gt=False,
-        n_images=None,
+        n_images=3,  # DBG - only use 3 images for now...
         demo_mode=True,
         preload=True,
     )
@@ -98,12 +98,11 @@ def inference_core(seq_dir):
         query_image_path = data["query_image_path"]
 
         if K is None:
-            # TODO: reset K to None for each frame if necessary
             K = data_utils.infer_K(img_path=query_image_path)
 
         # Detect object:
         if id == 0:
-            logger.warning(f"Re-Running local feature object detector for frame {id}")
+            logger.warning(f"Running local feature object detector for frame {id}")
             # Detect object by 2D local feature matching for the first frame:
             _, inp_crop, K_crop = local_feature_obj_detector.detect(
                 query_image, query_image_path, K
@@ -154,7 +153,7 @@ def inference_core(seq_dir):
             K,
             image_path=query_image_path,
             box3d=bbox3d,
-            draw_box=True,  # len(inliers) > 20,
+            draw_box=len(inliers) > 10,
             save_path=osp.join(paths["vis_box_dir"], f"{id}.jpg"),
         )
 
