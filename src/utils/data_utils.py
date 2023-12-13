@@ -294,12 +294,13 @@ def infer_K(img_path: str):
     """
     logger.info(f"Computing K for {img_path}")
 
-    model: demo.DeepCalibration = torch.hub.load(
-        "AlanSavio25/DeepSingleImageCalibration",
-        "DeepCalibration",
-        force_reload=False,
-    )
-
+    # model: demo.DeepCalibration = torch.hub.load(
+    #     "AlanSavio25/DeepSingleImageCalibration",
+    #     "DeepCalibration",
+    #     force_reload=False,
+    # )
+    
+    model = demo.DeepCalibration()
     ret = model.calibrate_from_path(image_path=img_path)
     focal_length_pixels = ret["focal_length_pixels"]
     height = ret["height"]

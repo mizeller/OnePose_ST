@@ -4,7 +4,7 @@ from .base_model import BaseModel
 import torch.nn as nn
 import numpy as np
 from copy import deepcopy
-from calib.calib.models.utils_densenet import _DenseBlock, _Transition
+from src.utils.calib.calib.models.utils_densenet import _DenseBlock, _Transition
 from torch.nn import Identity
 import pycolmap
 
