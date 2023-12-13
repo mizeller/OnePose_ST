@@ -39,16 +39,17 @@ class CONFIG:
         shape3d_val: int = 7000  # #points in 3D point cloud; only used if pad3D is True
 
     def __init__(self):
-        self.obj_name: str = "spot_rgb"  # TODO: change here
+        self.obj_name: str = "spot"  # "spot_rgb"  # TODO: change here
         self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}"
         # NOTE: there needs to exist a sub-directory called "color_full" in ∀ data_dirs which contain the image sequences.
         #       furthermore, an "instrinsics.txt" with the corresponding camera intrinsics is also required...
-        self.data_dirs: List[str] = ["spot_yt_cropped-test"]  # TODO: change here
+        self.data_dirs: List[str] = ["spot_small-test"]  # TODO: change here
         self.sfm_model_dir: str = (
             f"{self.data_root}/sfm_model/outputs_softmax_loftr_loftr/{self.obj_name}"
         )
         self.datamodule = CONFIG.DATAMODULE()
         self.model: dict = self._get_model()
+        self.DBG: bool = True
 
     def _get_model(self) -> dict:
         with open("configs/experiment/inference_demo.yaml", "r") as f:
@@ -73,13 +74,15 @@ def inference_core(seq_dir):
         img_resize=None,
         df=cfg.datamodule.df,
         pad=cfg.datamodule.pad3D,
-        n_images=3,  # DBG - only use 3 images for now...
+        # n_images=3, # consider all images
         DBG=False,
     )
     local_feature_obj_detector: LocalFeatureObjectDetector = LocalFeatureObjectDetector(
         sfm_ws_dir=paths["sfm_ws_dir"],
         output_results=True,
         detect_save_dir=paths["vis_detector_dir"],
+        K_crop_save_dir=paths["vis_detector_dir"],
+        DBG=cfg.DBG,
     )
     match_2D_3D_model = build_model(
         cfg.model["OnePosePlus"], cfg.model["pretrained_ckpt"]
@@ -151,7 +154,7 @@ def inference_core(seq_dir):
             K,
             image_path=query_image_path,
             box3d=bbox3d,
-            draw_box=len(inliers) > 10,
+            draw_box=len(inliers) > 20,
             save_path=osp.join(paths["vis_box_dir"], f"{id}.jpg"),
         )
 
@@ -173,4 +176,5 @@ def main() -> None:
 if __name__ == "__main__":
     global cfg
     cfg: CONFIG = CONFIG()
+    os.system(f"rm -rf temp/*")
     main()
