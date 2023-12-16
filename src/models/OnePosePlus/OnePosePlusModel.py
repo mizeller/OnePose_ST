@@ -1,4 +1,3 @@
-
 from loguru import logger
 import torch
 import torch.nn as nn
@@ -50,7 +49,7 @@ class OnePosePlus_model(nn.Module):
             else:
                 raise NotImplementedError
 
-            self.kpt_3d_pos_encoding = encoding_func(
+            self.kpt_3d_pos_encoding: KeypointEncoding_linear = encoding_func(
                 inp_dim=3,
                 feature_dim=self.config["keypoints_encoding"]["descriptor_dim"],
                 layers=self.config["keypoints_encoding"]["keypoints_encoder"],
@@ -97,12 +96,11 @@ class OnePosePlus_model(nn.Module):
         """
         Update:
             data (dict): {
-                keypoints3d: [N, n1, 3]
-                descriptors3d_db: [N, dim, n1]
+                keypoints3d: [N, n1, 3]                 torch.Size([1, 15220, 3])           THIS IS THE MODEL, i.e. the 3D POINTCLOUD
+                descriptors3d_db: [N, dim, n1], i.e.    torch.Size([1, 128, 15220])         descriptors3d_coarse_db --> alternative to descriptors3d_db
                 scores3d_db: [N, n1, 1]
 
-                query_image: (N, 1, H, W)
-                query_image_scale: (N, 2)
+                query_image: (N, 1, H, W), i.e.         torch.Size([1, 1, 512, 512])
                 query_image_mask(optional): (N, H, W)
             }
         """
@@ -120,6 +118,7 @@ class OnePosePlus_model(nn.Module):
             }
         )
 
+        # [torch.Size([1, 256, 64, 64]), torch.Size([1, 128, 256, 256])]
         query_feature_map = self.backbone(data["query_image"])
 
         query_feat_b_c, query_feat_f = _extract_backbone_feats(
@@ -155,7 +154,9 @@ class OnePosePlus_model(nn.Module):
             else data["descriptors3d_coarse_db"]
         )
 
-        query_mask = data["query_image_mask"].flatten(-2) if "query_image_mask" in data else None
+        query_mask = (
+            data["query_image_mask"].flatten(-2) if "query_image_mask" in data else None
+        )
 
         desc3d_db, query_feat_c = self.loftr_coarse(
             desc3d_db,
@@ -164,6 +165,11 @@ class OnePosePlus_model(nn.Module):
         )
 
         # 3. match coarse-level
+        # add these key:value pairs to data:
+        # conf_matrix                                   torch.Size([1, 15220, 4096])
+        # b_ids, i_ids, j_ids, gt_mask, m_bids, mconf   torch.Size([120])
+        # mkpts_3d_db                                   torch.Size([120, 3])                visualize pointcloud
+        # mkpts_query_c                                 torch.Size([120, 2])
         self.coarse_matching(desc3d_db, query_feat_c, data, mask_query=query_mask)
 
         if not self.config["fine_matching"]["enable"]:
@@ -185,10 +191,7 @@ class OnePosePlus_model(nn.Module):
             query_feat_f,
         )
         # at least one coarse level predicted
-        if (
-            query_feat_f_unfolded.size(0) != 0
-            and self.config["loftr_fine"]["enable"]
-        ):
+        if query_feat_f_unfolded.size(0) != 0 and self.config["loftr_fine"]["enable"]:
             desc3d_db_selected, query_feat_f_unfolded = self.loftr_fine(
                 desc3d_db_selected, query_feat_f_unfolded
             )

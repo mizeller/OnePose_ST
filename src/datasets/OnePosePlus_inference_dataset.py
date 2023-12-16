@@ -1,5 +1,5 @@
+from typing import List
 from loguru import logger
-import os
 import os.path as osp
 import torch
 import numpy as np
@@ -30,15 +30,15 @@ class OnePosePlusInferenceDataset(Dataset):
         preload: bool = False,
     ) -> None:
         super().__init__()
-        self.DBG = DBG
-        self.shape3d = shape3d
-        self.pad = pad
-        self.image_paths = (
+        self.DBG: bool = DBG
+        self.shape3d: int = shape3d
+        self.pad: bool = pad
+        self.image_paths: List[str] = (
             image_paths[:: int(len(image_paths) / n_images)]
             if n_images is not None
             else image_paths
         )
-        logger.info(f"Will process:{len(self.image_paths)} images ")
+        logger.info(f"Will process:{len(self.image_paths)} images. ")
         self.img_pad = img_pad
         self.img_resize = img_resize
         self.df = df
@@ -114,9 +114,6 @@ class OnePosePlusInferenceDataset(Dataset):
         avg_data = np.load(avg_anno3d_file)
 
         keypoints3d = torch.Tensor(avg_data["keypoints3d"])  # [m, 3]
-        if self.DBG:
-            vis_utils.visualize_pointcloud(npz_file=avg_anno3d_file, v="avg_anno3d")
-
         avg_descriptors3d = torch.Tensor(avg_data["descriptors3d"])  # [dim, m]
         avg_scores = torch.Tensor(avg_data["scores3d"])  # [m, 1]
         num_3d_orig = keypoints3d.shape[0]
@@ -131,6 +128,7 @@ class OnePosePlusInferenceDataset(Dataset):
             avg_coarse_data["descriptors3d"]
         )  # [dim, m]
         if self.DBG:
+            vis_utils.visualize_pointcloud(npz_file=avg_anno3d_file, v="avg_anno3d")
             vis_utils.visualize_pointcloud(
                 npz_file=avg_anno3d_coarse_file, v="avg_ann3d_coarse"
             )

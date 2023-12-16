@@ -7,6 +7,7 @@ import demo
 from tqdm import tqdm
 from loguru import logger
 import os
+from pathlib import Path
 
 os.environ[
     "TORCH_USE_RTLD_GLOBAL"
@@ -23,6 +24,7 @@ from src.inference.inference_OnePosePlus import build_model
 from src.local_feature_object_detector.local_feature_2D_detector import (
     LocalFeatureObjectDetector,
 )
+from src.models.OnePosePlus.OnePosePlusModel import OnePosePlus_model
 
 
 ####################################################################################################
@@ -39,11 +41,11 @@ class CONFIG:
         shape3d_val: int = 7000  # #points in 3D point cloud; only used if pad3D is True
 
     def __init__(self):
-        self.obj_name: str = "spot"  # "spot_rgb"  # TODO: change here
+        # TODO: adapt obj_name and data_dirs to your needs
+        self.obj_name: str = "spot"  # "spot"
         self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}"
-        # NOTE: there needs to exist a sub-directory called "color_full" in ∀ data_dirs which contain the image sequences.
-        #       furthermore, an "instrinsics.txt" with the corresponding camera intrinsics is also required...
-        self.data_dirs: List[str] = ["spot_small-test"]  # TODO: change here
+        # NOTE: there must exist a "color_full" sub-directory in ∀ data_dirs
+        self.data_dirs: List[str] = ["spot_small-test"]
         self.sfm_model_dir: str = (
             f"{self.data_root}/sfm_model/outputs_softmax_loftr_loftr/{self.obj_name}"
         )
@@ -75,7 +77,7 @@ def inference_core(seq_dir):
         df=cfg.datamodule.df,
         pad=cfg.datamodule.pad3D,
         # n_images=3, # consider all images
-        DBG=False,
+        DBG=cfg.DBG,
     )
     local_feature_obj_detector: LocalFeatureObjectDetector = LocalFeatureObjectDetector(
         sfm_ws_dir=paths["sfm_ws_dir"],
@@ -84,7 +86,7 @@ def inference_core(seq_dir):
         K_crop_save_dir=paths["vis_detector_dir"],
         DBG=cfg.DBG,
     )
-    match_2D_3D_model = build_model(
+    match_2D_3D_model: OnePosePlus_model = build_model(
         cfg.model["OnePosePlus"], cfg.model["pretrained_ckpt"]
     )
     match_2D_3D_model.cuda()
@@ -136,6 +138,31 @@ def inference_core(seq_dir):
             match_2D_3D_model(data)
         mkpts_3d = data["mkpts_3d_db"].cpu().numpy()  # N*3
         mkpts_query = data["mkpts_query_f"].cpu().numpy()  # N*2
+
+        # visualise the detected keypoints on the 3D pointcloud and the query image. 
+        # ransac_PnP operates on these sets of keypoints
+        if cfg.DBG:
+            Path(f"temp/2D_3D_matches").mkdir(parents=True, exist_ok=True)
+            # DBG: visualise the detected keypoints in the 3D pointcloud
+            import open3d as o3d
+
+            pcd = o3d.geometry.PointCloud()
+            keypoints3d_cpu = data["mkpts_3d_db"].detach().clone().cpu().numpy()
+            pcd.points = o3d.utility.Vector3dVector(keypoints3d_cpu)
+            path: str = f"temp/2D_3D_matches/mkpts_3d_db.ply"
+            o3d.io.write_point_cloud(path, pcd)
+
+            import cv2
+
+            query_image = inp_crop.squeeze().cpu().detach().numpy()
+            query_image = query_image * 255
+            query_image = query_image.astype(np.uint8)
+            query_image = cv2.cvtColor(query_image, cv2.COLOR_GRAY2RGB)
+            for point in mkpts_query:
+                x, y = point.astype(np.int)
+                cv2.circle(query_image, (x, y), 3, (0, 255, 0), -1)
+            cv2.imwrite("temp/2D_3D_matches/mkpts_query.png", query_image)
+
         pose_pred, _, inliers, _ = ransac_PnP(
             K_crop,
             mkpts_query,
