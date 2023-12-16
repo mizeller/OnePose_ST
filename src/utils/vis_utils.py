@@ -84,16 +84,18 @@ def visualize_pointcloud(
     """Given an npz file extract and save the pointcloud as a ply file in temp/
     Alternatively: provide the list of 3d points as a torch tensor [m, 3] and add a version/uuid to the filename
     """
-    if tensor:
+    if tensor is not None:
         keypoints3d = tensor
     else:
         assert Path(npz_file).exists(), f"{npz_file} does not exist"
         avg_data = np.load(npz_file)
         keypoints3d = torch.Tensor(avg_data["keypoints3d"])  # [m, 3]
     pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(keypoints3d.numpy())
-
-    path: str = f"temp/3d_keypoints_{v}.ply" if v else f"temp/3d_keypoints.ply"
+    # pcd.points = o3d.utility.Vector3dVector(keypoints3d.numpy())
+    keypoints3d_cpu = keypoints3d.detach().clone().cpu().numpy().reshape(-1, 3)
+    pcd.points = o3d.utility.Vector3dVector(keypoints3d_cpu)
+    Path(f"temp/model").mkdir(parents=True, exist_ok=True)
+    path: str = f"temp/model/3d_keypoints_{v}.ply" if v else f"temp/3d_keypoints.ply"
     logger.info(f"Saving pointcloud to {path}")
     o3d.io.write_point_cloud(path, pcd)
     return
