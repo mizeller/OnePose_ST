@@ -1,10 +1,12 @@
 import pickle
 import h5py
 import numpy as np
-import os
 import os.path as osp
 import cv2
 import torch
+from collections import defaultdict
+import matplotlib.pyplot as plt
+import open3d as o3d
 
 
 def save_obj(obj, name):
@@ -41,6 +43,28 @@ def save_h5(dict_to_save, filename, transform_slash=True):
                 key.replace("/", "+") if transform_slash else key,
                 data=dict_to_save[key],
             )
+
+
+def save_ply(filename, detections: defaultdict(int)):
+    detections = {point: score for point, score in detections.items() if score != 0}
+    cmap = plt.get_cmap("plasma")
+    counter_values = list(detections.values())
+    norm = plt.Normalize(min(counter_values), max(counter_values))
+    colors = []
+    for counter_value in detections.values():
+        color_rgba = cmap(norm(counter_value))
+        colors.append(color_rgba[:3])
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(list(detections.keys()))
+    pcd.colors = o3d.utility.Vector3dVector(colors)
+
+    o3d.io.write_point_cloud(
+        f"temp/{filename}.ply",
+        pcd,
+        write_ascii=False,
+        compressed=False,
+        print_progress=True,
+    )
 
 
 def read_grayscale(
