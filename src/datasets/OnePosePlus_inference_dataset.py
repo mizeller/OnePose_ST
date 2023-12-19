@@ -129,9 +129,6 @@ class OnePosePlusInferenceDataset(Dataset):
         )  # [dim, m]
         if self.DBG:
             vis_utils.visualize_pointcloud(npz_file=avg_anno3d_file, v="avg_anno3d")
-            vis_utils.visualize_pointcloud(
-                npz_file=avg_anno3d_coarse_file, v="avg_ann3d_coarse"
-            )
 
         avg_coarse_scores = torch.Tensor(avg_coarse_data["scores3d"])  # [m, 1]
 
