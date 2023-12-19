@@ -279,7 +279,6 @@ class LocalFeatureObjectDetector:
             cropped_K: np.ndarray[3*3];
         """
         query_id: str = str(uuid.uuid4())[:6]  # uuid of current query image
-        Path(f"temp/{query_id}").mkdir(parents=True, exist_ok=True)
         if len(query_img.shape) != 4:
             query_inp = query_img[None].cuda()
         else:
@@ -291,6 +290,7 @@ class LocalFeatureObjectDetector:
         )
 
         if self.DBG:  # DBG
+            Path(f"temp/{query_id}").mkdir(parents=True, exist_ok=True)
             img = (query_img.squeeze().numpy() * 255).astype("uint8")
             cv2.imwrite(f"temp/{query_id}/00_query.png", img)
             cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 0, 255), 2)
