@@ -7,7 +7,7 @@ import demo
 from tqdm import tqdm
 from loguru import logger
 import os
-from pathlib import Path
+from collections import defaultdict
 
 os.environ[
     "TORCH_USE_RTLD_GLOBAL"
@@ -16,11 +16,12 @@ import os.path as osp
 import numpy as np
 import torch
 
+from src.utils import data_io
 from src.utils import data_utils
 from src.utils import vis_utils
-from src.utils.metric_utils import ransac_PnP
+from src.utils import metric_utils
 from src.datasets.OnePosePlus_inference_dataset import OnePosePlusInferenceDataset
-from src.inference.inference_OnePosePlus import build_model
+from src.inference import inference_OnePosePlus
 from src.local_feature_object_detector.local_feature_2D_detector import (
     LocalFeatureObjectDetector,
 )
@@ -51,7 +52,7 @@ class CONFIG:
         )
         self.datamodule = CONFIG.DATAMODULE()
         self.model: dict = self._get_model()
-        self.DBG: bool = True
+        self.DBG: bool = False
 
     def _get_model(self) -> dict:
         with open("configs/experiment/inference_demo.yaml", "r") as f:
@@ -63,11 +64,9 @@ class CONFIG:
 ####################################################################################################
 
 
-def inference_core(seq_dir):
+def inference_core(seq_dir, detection_counter: defaultdict):
     """Inference core function for OnePosePlus. Adapted from demo.py"""
-    data_root = cfg.data_root
-    sfm_model_dir = cfg.sfm_model_dir
-    img_list, paths = demo.get_default_paths(data_root, seq_dir, sfm_model_dir)
+    img_list, paths = demo.get_default_paths(cfg.data_root, seq_dir, cfg.sfm_model_dir)
     dataset = OnePosePlusInferenceDataset(
         paths["sfm_dir"],
         img_list,
@@ -86,7 +85,7 @@ def inference_core(seq_dir):
         K_crop_save_dir=paths["vis_detector_dir"],
         DBG=cfg.DBG,
     )
-    match_2D_3D_model: OnePosePlus_model = build_model(
+    match_2D_3D_model: OnePosePlus_model = inference_OnePosePlus.build_model(
         cfg.model["OnePosePlus"], cfg.model["pretrained_ckpt"]
     )
     match_2D_3D_model.cuda()
@@ -138,32 +137,7 @@ def inference_core(seq_dir):
             match_2D_3D_model(data)
         mkpts_3d = data["mkpts_3d_db"].cpu().numpy()  # N*3
         mkpts_query = data["mkpts_query_f"].cpu().numpy()  # N*2
-
-        # visualise the detected keypoints on the 3D pointcloud and the query image. 
-        # ransac_PnP operates on these sets of keypoints
-        if cfg.DBG:
-            Path(f"temp/2D_3D_matches").mkdir(parents=True, exist_ok=True)
-            # DBG: visualise the detected keypoints in the 3D pointcloud
-            import open3d as o3d
-
-            pcd = o3d.geometry.PointCloud()
-            keypoints3d_cpu = data["mkpts_3d_db"].detach().clone().cpu().numpy()
-            pcd.points = o3d.utility.Vector3dVector(keypoints3d_cpu)
-            path: str = f"temp/2D_3D_matches/mkpts_3d_db.ply"
-            o3d.io.write_point_cloud(path, pcd)
-
-            import cv2
-
-            query_image = inp_crop.squeeze().cpu().detach().numpy()
-            query_image = query_image * 255
-            query_image = query_image.astype(np.uint8)
-            query_image = cv2.cvtColor(query_image, cv2.COLOR_GRAY2RGB)
-            for point in mkpts_query:
-                x, y = point.astype(np.int)
-                cv2.circle(query_image, (x, y), 3, (0, 255, 0), -1)
-            cv2.imwrite("temp/2D_3D_matches/mkpts_query.png", query_image)
-
-        pose_pred, _, inliers, _ = ransac_PnP(
+        pose_pred, _, inliers, _ = metric_utils.ransac_PnP(
             K_crop,
             mkpts_query,
             mkpts_3d,
@@ -174,6 +148,15 @@ def inference_core(seq_dir):
         )
         logger.debug(f"Pose estimation inliers: {len(inliers)} for frame {id}")
         pred_poses[id] = [pose_pred, inliers]
+        for inlier in inliers:
+            detection_counter[tuple(mkpts_3d[inlier])] += 1
+
+        # visualise the detected keypoints on the 3D pointcloud and the query image.
+        # ransac_PnP operates on these sets of keypoints
+        if cfg.DBG:
+            vis_utils.visualize_2D_3D_keypoints(
+                data, inp_crop, inliers, mkpts_3d, mkpts_query
+            )
 
         # Visualize:
         vis_utils.save_demo_image(
@@ -189,14 +172,27 @@ def inference_core(seq_dir):
     logger.info(f"Generate demo video begin...")
     vis_utils.make_video(paths["vis_box_dir"], paths["demo_video_path"])
 
+    return detection_counter
+
 
 def main() -> None:
+    keypoints3d = np.load(f"{cfg.sfm_model_dir}/anno/anno_3d_average.npz")[
+        "keypoints3d"
+    ]  # [m, 3]
+
+    # init detection counter
+    detection_counter = defaultdict(int)
+    for coord in keypoints3d:
+        detection_counter[tuple(coord)] = 0
+
     # loop over all data_dirs specified in the CONFIG class
     for test_dir in tqdm(cfg.data_dirs, total=len(cfg.data_dirs)):
         seq_dir = osp.join(cfg.data_root, test_dir)
         logger.info(f"Eval {seq_dir}")
-        inference_core(seq_dir)
+        detection_counter = inference_core(seq_dir, detection_counter)
 
+    if True:  # cfg.DBG:
+        data_io.save_ply("detected_pointcloud", detection_counter)
     logger.info("Done")
 
 
