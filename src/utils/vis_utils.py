@@ -141,3 +141,38 @@ def make_video(image_path, output_video_path):
         video.write(image)
     video.release()
     logger.info(f"Demo vido saved to: {output_video_path}")
+
+
+def visualize_2D_3D_keypoints(data, inp_crop, inliers, mkpts_3d, mkpts_query):
+    Path(f"temp/2D_3D_matches").mkdir(parents=True, exist_ok=True)
+
+    ## Visualize 3D keypoints ##
+    pcd = o3d.geometry.PointCloud()
+    keypoints3d_cpu = data["mkpts_3d_db"].detach().clone().cpu().numpy()
+    pcd.points = o3d.utility.Vector3dVector(keypoints3d_cpu)
+    path: str = f"temp/2D_3D_matches/mkpts_3d_db.ply"
+    o3d.io.write_point_cloud(path, pcd)
+
+    ## Visualize 2D keypoints ##
+    query_image = inp_crop.squeeze().cpu().detach().numpy()
+    query_image = query_image * 255
+    query_image = query_image.astype(np.uint8)
+    query_image = cv2.cvtColor(query_image, cv2.COLOR_GRAY2RGB)
+    for point in mkpts_query:
+        x, y = point.astype(int)
+        cv2.circle(query_image, (x, y), 3, (0, 255, 0), -1)
+    cv2.imwrite("temp/2D_3D_matches/mkpts_query.png", query_image)
+
+    ## Visualize 2D inliers ##
+    inliers_3d = np.zeros((len(inliers), 3))
+    for idx, inlier in enumerate(inliers):
+        inliers_3d[idx] = mkpts_3d[inlier]
+        x, y = mkpts_query[inlier].astype(int)
+        cv2.circle(query_image, (x, y), 3, (0, 0, 255), -1)
+    cv2.imwrite("temp/2D_3D_matches/mkpts_inliers.png", query_image)
+
+    ## Visualize 3D inliers ##
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(inliers_3d)
+    path: str = f"temp/2D_3D_matches/mkpts_3d_inliers.ply"
+    o3d.io.write_point_cloud(path, pcd)
