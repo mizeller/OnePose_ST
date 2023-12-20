@@ -46,6 +46,13 @@ def save_h5(dict_to_save, filename, transform_slash=True):
 
 
 def save_ply(filename, detections: defaultdict(int)):
+    """Filter the pointcloud for detections and cmap them to get a coloured pointcloud.
+
+    Args:
+        filename (str): ply filename
+        detections (defaultdict): dict containing {(x,y,z): detection_score} for all points in original model
+    """
+    
     detections = {point: score for point, score in detections.items() if score != 0}
     cmap = plt.get_cmap("plasma")
     counter_values = list(detections.values())
