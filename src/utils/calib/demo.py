@@ -108,7 +108,6 @@ class DeepCalibration:
     def calibrate_from_path(self, image_path):
         image = read_image(image_path, grayscale=False)
         ret = self.calibrate(image)
-        logger.warning("NOT visualizing results!")
         # self.visualize(image, ret)
         return ret
 
