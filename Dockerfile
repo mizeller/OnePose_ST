@@ -39,6 +39,7 @@ RUN apt-get update && apt-get install -y \
     wget \
     unzip \
     mlocate \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 
@@ -90,13 +91,17 @@ RUN python3 -m pip install --upgrade pip && python3 -m pip install -U \
     loguru \
     h5py
 
-RUN python3 -m pip install ultralytics
 
 ## INSTALL ONEPOSE++ + DEPENDENCIES (python packages/submodules)
 WORKDIR /OnePose_ST
 COPY requirements.txt /OnePose_ST
 
-RUN python3 -m pip install -r /OnePose_ST/requirements.txt 
+RUN python3 -m pip install -r /OnePose_ST/requirements.txt
+RUN python3 -m pip install imageio[ffmpeg]
+
+COPY co-tracker/setup.py /OnePose_ST
+RUN python3 -m pip install -e .
+
 RUN ln -s /usr/bin/gcc-9 /usr/local/cuda-11.3/bin/gcc && ln -s /usr/bin/g++-9 /usr/local/cuda-11.3/bin/g++
 
 # ------------------------------------ Start: DeepLM Stuff ---------------------------------- #
