@@ -61,18 +61,42 @@ class LocalFeatureObjectDetector:
         self.detect_save_dir = detect_save_dir
         self.K_crop_save_dir = K_crop_save_dir
         self.DBG: bool = DBG
+        self.query_id: str = ""
 
     def load_ref_view_images(self, sfm_ws_dir, n_ref_view):
         assert osp.exists(sfm_ws_dir), f"SfM work space:{sfm_ws_dir} not exists!"
-        cameras, images, points3D = read_model(sfm_ws_dir)
-        idx = 0
-        sample_gap = len(images) // n_ref_view
-        db_image_paths = natsort.natsorted([image.name for image in images.values()])
+        # _, images, _ = read_model(sfm_ws_dir)
+        # idx = 0
+        # sample_gap = len(images) // n_ref_view
+        # db_image_paths = natsort.natsorted([image.name for image in images.values()])
+        # FIXME: just hardcode some good reference frames here to check if it makes a difference (especially for the "Blind Spot" problem)
+        db_image_paths = [
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/4.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/8.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/12.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/14.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/18.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/22.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/26.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/30.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/32.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/32.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/35.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/37.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/41.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/45.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/48.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/51.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/54.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/57.png",
+            "/workspaces/OnePose_ST/data/spot_rgb/scene_00-annotate/color/64.png",
+        ]
 
         db_imgs = []  # id: image
         db_corners_homo = []
-        for idx in range(1, len(images), sample_gap):
-            db_img_path = db_image_paths[idx]
+        # for idx in range(1, len(images), sample_gap):
+        #     db_img_path = db_image_paths[idx]
+        for db_img_path in db_image_paths:
             db_img = cv2.imread(db_img_path, cv2.IMREAD_GRAYSCALE)
             db_imgs.append(torch.from_numpy(db_img)[None][None] / 255.0)
             H, W = db_img.shape[-2:]
@@ -90,7 +114,7 @@ class LocalFeatureObjectDetector:
         return db_imgs, db_corners_homo
 
     @torch.no_grad()
-    def match_worker(self, query, query_id: str = ""):
+    def match_worker(self, query):
         detect_results_dict = {}
         for idx, db_img in enumerate(
             self.db_imgs
@@ -144,73 +168,15 @@ class LocalFeatureObjectDetector:
                 "bbox": np.array([x0, y0, x1, y1]),
             }
 
-            if self.DBG:
-                img0 = (query.cpu().squeeze().numpy() * 255).astype("uint8")
-                cv2.putText(
-                    img0,
-                    "query image",
-                    (20, img0.shape[0] - 20),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (255, 255, 255),
-                    2,
-                )
-
-                img1 = (db_img.squeeze().numpy() * 255).astype("uint8")
-                cv2.putText(
-                    img1,
-                    f"db image {idx}",
-                    (20, img1.shape[0] - 20),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (255, 255, 255),
-                    2,
-                )
-
-                # make matching figures for inliers only
-                mkpts0_inliers, mkpts1_inliers, mconfs_inliers = [], [], []
-                for i in range(mkpts0.shape[0]):
-                    if inliers[i][0]:
-                        mkpts0_inliers.append(mkpts0[i])
-                        mkpts1_inliers.append(mkpts1[i])
-                        mconfs_inliers.append(match_data["mconf"][i])
-                mkpts0_inliers = np.array(mkpts0_inliers)
-                mkpts1_inliers = np.array(mkpts1_inliers)
-                mconfs_inliers = torch.tensor(mconfs_inliers)
-                make_matching_figure(
-                    img0=img0,
-                    img1=img1,
-                    mkpts0=mkpts0_inliers,
-                    mkpts1=mkpts1_inliers,
-                    color=cm.jet(mconfs_inliers, alpha=0.7),
-                    text=[
-                        "LoFTR",
-                        "Inliers: {}".format(len(mkpts0_inliers)),
-                    ],
-                    path=f"temp/{query_id}/02_query_inliers_ref_{idx}.png",
-                )
-
-                # make_matching_figure(
-                #     img0=img0,
-                #     img1=img1,
-                #     mkpts0=mkpts0,
-                #     mkpts1=mkpts1,
-                #     color=cm.jet(match_data["mconf"].cpu().numpy(), alpha=0.7),
-                #     text=[
-                #         "LoFTR",
-                #         "Matches: {}".format(len(mkpts0)),
-                #     ],
-                #     path=f"temp/{query_id}/01_matches_ref_{idx}.png",
-                # )
 
         return detect_results_dict
 
-    def detect_by_matching(self, query, query_id: str = ""):
+    def detect_by_matching(self, query):
         """
         1. Compute the number of inliers between all reference images and query image -> detect_result_dict
         2. Extract the bbox from the reference image with the most inliers
         """
-        detect_results_dict = self.match_worker(query=query, query_id=query_id)
+        detect_results_dict = self.match_worker(query=query)
 
         # Sort multiple bbox candidate and use bbox with maxium inliers:
         idx_sorted = [
@@ -248,7 +214,8 @@ class LocalFeatureObjectDetector:
         if K is not None:
             K_crop, K_crop_homo = get_K_crop_resize(bbox_new, K_crop, resize_shape)
         image_crop, trans2 = get_image_crop_resize(image_crop, bbox_new, resize_shape)
-        return image_crop, K_crop if K is not None else None
+        trans = trans2.dot(trans1)
+        return image_crop, K_crop if K is not None else None, trans
 
     def save_detection(self, crop_img, query_img_path):
         if self.output_results and self.detect_save_dir is not None:
@@ -278,24 +245,25 @@ class LocalFeatureObjectDetector:
             cropped_image: torch.tensor[1 * 1 * crop_size * crop_size] (normalized),
             cropped_K: np.ndarray[3*3];
         """
-        query_id: str = str(uuid.uuid4())[:6]  # uuid of current query image
+        self.query_id: str = str(uuid.uuid4())[:6]  # uuid of current query image
+        if self.DBG:
+            Path(f"temp/{self.query_id}").mkdir(parents=True, exist_ok=True)
         if len(query_img.shape) != 4:
             query_inp = query_img[None].cuda()
         else:
             query_inp = query_img.cuda()
         # Detect bbox and crop image:
-        bbox = self.detect_by_matching(query=query_inp, query_id=query_id)
-        image_crop, K_crop = self.crop_img_by_bbox(
+        bbox = self.detect_by_matching(query=query_inp)
+        image_crop, K_crop, transformation_matrix = self.crop_img_by_bbox(
             query_img_path, bbox, K, crop_size=crop_size
         )
 
         if self.DBG:  # DBG
-            Path(f"temp/{query_id}").mkdir(parents=True, exist_ok=True)
             img = (query_img.squeeze().numpy() * 255).astype("uint8")
-            cv2.imwrite(f"temp/{query_id}/00_query.png", img)
+            cv2.imwrite(f"temp/{self.query_id}/00_query.png", img)
             cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 0, 255), 2)
-            cv2.imwrite(f"temp/{query_id}/03_query_bbox.png", img)
-            cv2.imwrite(f"temp/{query_id}/04_query_cropped.png", image_crop)
+            cv2.imwrite(f"temp/{self.query_id}/01_query_bbox.png", img)
+            cv2.imwrite(f"temp/{self.query_id}/02_query_cropped.png", image_crop)
 
         if self.output_results:
             self.save_detection(image_crop, query_img_path)
@@ -304,7 +272,7 @@ class LocalFeatureObjectDetector:
         # To Tensor:
         image_crop = image_crop.astype(np.float32) / 255
         image_crop_tensor = torch.from_numpy(image_crop)[None][None].cuda()
-        return bbox, image_crop_tensor, K_crop
+        return bbox, image_crop_tensor, K_crop, transformation_matrix
 
     def previous_pose_detect(
         self, query_img_path, K, pre_pose, bbox3D_corner, crop_size=512
@@ -327,7 +295,7 @@ class LocalFeatureObjectDetector:
         x1, y1 = np.max(proj_2D_coor, axis=0)
         bbox = np.array([x0, y0, x1, y1]).astype(np.int32)
 
-        image_crop, K_crop = self.crop_img_by_bbox(
+        image_crop, K_crop, transformation_matrix = self.crop_img_by_bbox(
             query_img_path, bbox, K, crop_size=crop_size
         )
         self.save_detection(image_crop, query_img_path)
@@ -337,4 +305,4 @@ class LocalFeatureObjectDetector:
         image_crop = image_crop.astype(np.float32) / 255
         image_crop_tensor = torch.from_numpy(image_crop)[None][None].cuda()
 
-        return bbox, image_crop_tensor, K_crop
+        return bbox, image_crop_tensor, K_crop, transformation_matrix
