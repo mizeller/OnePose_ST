@@ -135,7 +135,7 @@ def make_video(image_path, output_video_path):
         Path(output_video_path).unlink()
 
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    video = cv2.VideoWriter(output_video_path, fourcc, 24, (W, H))
+    video = cv2.VideoWriter(output_video_path, fourcc, 10, (W, H))
     for id, image_name in enumerate(images):
         image = cv2.imread(str(Path(image_path) / image_name))
         video.write(image)
