@@ -92,13 +92,14 @@ RUN python3 -m pip install --upgrade pip && python3 -m pip install -U \
     h5py
 
 
-## INSTALL ONEPOSE++ + DEPENDENCIES (python packages/submodules)
+## INSTALL ONEPOSE++ DEPENDENCIES (python packages/submodules)
 WORKDIR /OnePose_ST
 COPY requirements.txt /OnePose_ST
 
 RUN python3 -m pip install -r /OnePose_ST/requirements.txt
 RUN python3 -m pip install imageio[ffmpeg]
 
+## INSTALL COTRACKER DEPENDENCIES
 COPY co-tracker/setup.py /OnePose_ST
 RUN python3 -m pip install -e .
 
