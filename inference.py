@@ -7,12 +7,15 @@ import demo
 from tqdm import tqdm
 from loguru import logger
 import os
+from pathlib import Path
 from collections import defaultdict
+from cotracker.cotracker.utils.visualizer import Visualizer, read_video_from_path
+from cotracker.cotracker.predictor import CoTrackerPredictor, CoTrackerOnlinePredictor
+
 
 os.environ[
     "TORCH_USE_RTLD_GLOBAL"
 ] = "TRUE"  # important for DeepLM module, this line should before import torch
-import os.path as osp
 import numpy as np
 import torch
 
@@ -43,10 +46,23 @@ class CONFIG:
 
     def __init__(self):
         # TODO: adapt obj_name and data_dirs to your needs
-        self.obj_name: str = "spot"  # "spot"
+        self.obj_name: str = "spot_rgb"  # "spot"
         self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}"
         # NOTE: there must exist a "color_full" sub-directory in ∀ data_dirs
-        self.data_dirs: List[str] = ["spot_small-test"]
+        self.data_dirs: List[str] = [
+            # "asus_00-test",
+            # "asus_01-test",
+            # "asus_02-test",
+            # "asus_03-test",
+            # "asus_04-test",
+            # "asus_05-test",
+            "asus_05_small-test",
+            # "asus_06-test",
+            # "asus_07-test",
+            # "spot_yt-test",
+            # "spot_yt_cropped-test",
+            # "cotrack-test"
+        ]
         self.sfm_model_dir: str = (
             f"{self.data_root}/sfm_model/outputs_softmax_loftr_loftr/{self.obj_name}"
         )
@@ -94,9 +110,21 @@ def inference_core(seq_dir, detection_counter: defaultdict):
 
     bbox3d = np.loadtxt(paths["bbox3d_path"])
     pred_poses = {}  # {id:[pred_pose, inliers]}
+
+    queries = torch.empty(0, 3).cuda()  # replace this with your tensor
+
+     
     for id in tqdm(range(len(dataset))):
         data = dataset[id]
         query_image = data["query_image"]
+
+        
+        # convert the query image from torch.tensor to array
+        # use the query array for the co-tracking algorithm
+    #    query_array = query_image.repeat(1, 3, 1, 1)
+    #    query_array = query_array.numpy()
+    #    query_array = np.transpose(query_array, (2, 3, 1))
+
         query_image_path = data["query_image_path"]
 
         if K is None:
@@ -106,7 +134,7 @@ def inference_core(seq_dir, detection_counter: defaultdict):
         if id == 0:
             logger.warning(f"Running local feature object detector for frame {id}")
             # Detect object by 2D local feature matching for the first frame:
-            _, inp_crop, K_crop = local_feature_obj_detector.detect(
+            _, inp_crop, K_crop, transformation_matrix = local_feature_obj_detector.detect(
                 query_image, query_image_path, K
             )
         else:
@@ -118,7 +146,7 @@ def inference_core(seq_dir, detection_counter: defaultdict):
                     f"Re-Running local feature object detector for frame {id}"
                 )
                 # Consider previous pose estimation failed, reuse local feature object detector:
-                _, inp_crop, K_crop = local_feature_obj_detector.detect(
+                _, inp_crop, K_crop, transformation_matrix = local_feature_obj_detector.detect(
                     query_image, query_image_path, K
                 )
             else:
@@ -126,6 +154,7 @@ def inference_core(seq_dir, detection_counter: defaultdict):
                     _,
                     inp_crop,
                     K_crop,
+                    transformation_matrix
                 ) = local_feature_obj_detector.previous_pose_detect(
                     query_image_path, K, previous_frame_pose, bbox3d
                 )
@@ -149,13 +178,25 @@ def inference_core(seq_dir, detection_counter: defaultdict):
         logger.debug(f"Pose estimation inliers: {len(inliers)} for frame {id}")
         pred_poses[id] = [pose_pred, inliers]
         for inlier in inliers:
+            # only use inliers from every 2nd frame; frequently ran into CUDA OOM errors otherwise...
+            x, y = mkpts_query[inlier]
+            M_inv = np.linalg.inv(transformation_matrix)
+            original_coords = np.dot(M_inv, np.array([x,y, 1]))
+            x_orig = original_coords[0] / original_coords[2]
+            y_orig = original_coords[1] / original_coords[2]
+            queries = torch.cat([queries, torch.tensor([[int(id), int(x_orig), int(y_orig)]], device='cuda')], dim=0)
             detection_counter[tuple(mkpts_3d[inlier])] += 1
 
         # visualise the detected keypoints on the 3D pointcloud and the query image.
         # ransac_PnP operates on these sets of keypoints
         if cfg.DBG:
             vis_utils.visualize_2D_3D_keypoints(
-                data, inp_crop, inliers, mkpts_3d, mkpts_query
+                path=Path(f"temp/{local_feature_obj_detector.query_id}"),
+                data=data,
+                inp_crop=inp_crop,
+                inliers=inliers,
+                mkpts_3d=mkpts_3d,
+                mkpts_query=mkpts_query,
             )
 
         # Visualize:
@@ -170,9 +211,37 @@ def inference_core(seq_dir, detection_counter: defaultdict):
 
     # Output video to visualize estimated poses:
     logger.info(f"Generate demo video begin...")
-    vis_utils.make_video(paths["vis_box_dir"], paths["demo_video_path"])
+    vis_utils.make_video(
+        paths["vis_box_dir"], f"temp/demo_{seq_dir.split('/')[-1]}.mp4"
+    )
+    
+    # reset cuda cache for co-tracker 
+    torch.cuda.empty_cache() 
+    # Output video to visualize the co-tracking on the detected keypoints 
+    video = read_video_from_path(f"{seq_dir}/clip.mp4")
+    video = torch.from_numpy(video).permute(0, 3, 1, 2)[None].float() 
+    
+    model = CoTrackerPredictor()
+    video = video.cuda()
+    model = model.cuda()
+    
+    
+    pred_tracks, pred_visibility = model(video, queries=queries[None], backward_tracking=True)
+    vis = Visualizer(
+    save_dir='temp/',
+    linewidth=6,
+    mode='cool',
+    tracks_leave_trace=-1
+    )
+    vis.visualize(
+    video=video,
+    tracks=pred_tracks,
+    visibility=pred_visibility,
+    filename=f"demo_cotracker_{seq_dir.split('/')[-1]}") 
+    logger.info(f"Cotracker demo vido saved to: temp/demo_cotracker_{seq_dir.split('/')[-1]}.mp4")
 
     return detection_counter
+    
 
 
 def main() -> None:
@@ -191,8 +260,8 @@ def main() -> None:
         logger.info(f"Eval {seq_dir}")
         detection_counter = inference_core(seq_dir, detection_counter)
 
-    if True:  # cfg.DBG:
-        data_io.save_ply("detected_pointcloud", detection_counter)
+    if cfg.DBG:
+        data_io.save_ply("model/detections_pointcloud", detection_counter)
     logger.info("Done")
 
 
