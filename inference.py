@@ -9,8 +9,8 @@ from loguru import logger
 import os
 from pathlib import Path
 from collections import defaultdict
-from cotracker.cotracker.utils.visualizer import Visualizer, read_video_from_path
-from cotracker.cotracker.predictor import CoTrackerOnlinePredictor
+from submodules.CoTracker.cotracker.utils.visualizer import Visualizer, read_video_from_path
+from submodules.CoTracker.cotracker.predictor import CoTrackerOnlinePredictor
 from PIL import Image, ImageDraw
 
 os.environ[
@@ -168,7 +168,7 @@ def inference_core(seq_dir, detection_counter: defaultdict):
     pred_tracks_orig = None
     inlier_mkpts = {}
     window_frames = []
-    tracker_model = CoTrackerOnlinePredictor()
+    tracker_model = CoTrackerOnlinePredictor(checkpoint="submodules/CoTracker/checkpoints/cotracker2.pth")
     tracker_model = tracker_model.cuda()
     is_first_step = True
     do_tracking = False
@@ -181,6 +181,7 @@ def inference_core(seq_dir, detection_counter: defaultdict):
 
         ####### COTRACKING STUFF ########
         query_array = get_query_array(query_image, id)
+
         # TODO: tracker should run constantly after the first time,
         # this is a missing feature in the online tracker...
         if id % tracker_model.step == 0 and id != 0:
@@ -237,7 +238,8 @@ def inference_core(seq_dir, detection_counter: defaultdict):
         mkpts_query = data["mkpts_query_f"].cpu().numpy()  # N*2
 
         # DBG
-        visualize_mkpts(inp_crop, mkpts_query, f"02_mkpts_query_{id}")
+        if cfg.DBG:
+            visualize_mkpts(inp_crop, mkpts_query, f"02_mkpts_query_{id}")
 
         if do_tracking and id != 4 and pred_tracks_orig is not None:
             # map predicted tracks from coords wrt original image to current cropped img
@@ -295,7 +297,7 @@ def inference_core(seq_dir, detection_counter: defaultdict):
                 img_path=f"temp/debug/02_mkpts_query_{id}.jpg",
                 fill=(255, 0, 0),
             )
-        visualize_mkpts(
+            visualize_mkpts(
             query_image, inliers_orig, f"04_inliers_orig_{id}", fill=(255, 0, 0), r=1
         )
 
@@ -356,6 +358,7 @@ def inference_core(seq_dir, detection_counter: defaultdict):
         paths["vis_box_dir"], f"temp/demo_pose_{seq_dir.split('/')[-1]}.mp4"
     )
 
+    # save a video with predicted tracks
     logger.info(
         f"Cotracker demo vido saved to: temp/demo_track_{seq_dir.split('/')[-1]}.mp4"
     )
