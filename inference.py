@@ -8,9 +8,6 @@ from tqdm import tqdm
 from loguru import logger
 import os
 from pathlib import Path
-from collections import defaultdict
-from submodules.CoTracker.cotracker.utils.visualizer import Visualizer, read_video_from_path
-from submodules.CoTracker.cotracker.predictor import CoTrackerPredictor
 
 
 os.environ[
@@ -19,7 +16,6 @@ os.environ[
 import numpy as np
 import torch
 
-from src.utils import data_io
 from src.utils import data_utils
 from src.utils import vis_utils
 from src.utils import metric_utils
@@ -78,7 +74,7 @@ def transform_mkpts(transform, mkpts_query):
 ####################################################################################################
 
 
-def inference_core(seq_dir, detection_counter: defaultdict):
+def inference_core(seq_dir):
     """Inference core function for OnePosePlus. Adapted from demo.py"""
     img_list, paths = demo.get_default_paths(cfg.data_root, seq_dir, cfg.sfm_model_dir)
     dataset = OnePosePlusInferenceDataset(
@@ -108,9 +104,7 @@ def inference_core(seq_dir, detection_counter: defaultdict):
 
     bbox3d = np.loadtxt(paths["bbox3d_path"])
     pred_poses = {}  # {id:[pred_pose, inliers]}
-
-    queries = torch.empty(0, 3).cuda()  # replace this with your tensor
-    mkpts_cache = {} # 2D-3D correspondences cache
+    mkpts_cache = {} # 2D-3D correspondences cache // {id: {K_crop, mkpts_3d, mkpts_crop, inliers_orig, transform}}
      
     for id in tqdm(range(len(dataset))):
         data = dataset[id]
@@ -170,8 +164,6 @@ def inference_core(seq_dir, detection_counter: defaultdict):
         # mkpts_query[inliers] = inliers in cropped image
         # inliers_orig = inliers in original image
         inliers_orig = transform_mkpts(np.linalg.inv(transform), mkpts_crop[inliers_crop])
-        inliers_orig_w_id = np.c_[np.ones(inliers_orig.shape[0]) * int(id), inliers_orig] # add id to inliers
-        queries = torch.cat((queries, torch.from_numpy(inliers_orig_w_id).float().cuda()), dim=0)
 
         mkpts_cache[id] = {
             "K_crop": K_crop,
@@ -180,10 +172,6 @@ def inference_core(seq_dir, detection_counter: defaultdict):
             "mkpts_crop": mkpts_crop,
             "inliers_orig": inliers_orig
         }  
-
-        # update detection_counter
-        for i in inliers_crop:
-            detection_counter[tuple(mkpts_3d[i])] += 1
 
         # visualise the detected keypoints on the 3D pointcloud and the query image.
         # ransac_PnP operates on these sets of keypoints
@@ -216,53 +204,16 @@ def inference_core(seq_dir, detection_counter: defaultdict):
         paths["vis_box_dir"], pose_estimation_demo_video
     )
     
-    # reset cuda cache for co-tracker 
-    torch.cuda.empty_cache() 
-    # Output video to visualize the co-tracking on the detected keypoints 
-    video = read_video_from_path(f"{seq_dir}/clip.mp4")
-    video = torch.from_numpy(video).permute(0, 3, 1, 2)[None].float() 
-    
-    model = CoTrackerPredictor(checkpoint='submodules/CoTracker/checkpoints/cotracker2.pth')
-    video = video.cuda()
-    model = model.cuda()
-    
-    
-    pred_tracks, pred_visibility = model(video, queries=queries[None], backward_tracking=True)
-    vis = Visualizer(
-    save_dir='temp/',
-    linewidth=1,
-    mode='cool',
-    tracks_leave_trace=-1
-    )
-    vis.visualize(
-    video=video,
-    tracks=pred_tracks,
-    visibility=pred_visibility,
-    filename=f"demo_cotracker_{seq_dir.split('/')[-1]}") 
-    logger.info(f"Cotracker demo vido saved to: temp/demo_cotracker_{seq_dir.split('/')[-1]}.mp4")
-
-    return detection_counter
-    
+    return 
 
 
 def main() -> None:
-    keypoints3d = np.load(f"{cfg.sfm_model_dir}/anno/anno_3d_average.npz")[
-        "keypoints3d"
-    ]  # [m, 3]
-
-    # init detection counter
-    detection_counter = defaultdict(int)
-    for coord in keypoints3d:
-        detection_counter[tuple(coord)] = 0
-
     # loop over all data_dirs specified in the CONFIG class
     for test_dir in tqdm(cfg.data_dirs, total=len(cfg.data_dirs)):
         seq_dir = osp.join(cfg.data_root, test_dir)
         logger.info(f"Eval {seq_dir}")
-        detection_counter = inference_core(seq_dir, detection_counter)
+        inference_core(seq_dir)
 
-    if cfg.DBG:
-        data_io.save_ply("model/detections_pointcloud", detection_counter)
     logger.info("Done")
 
 
