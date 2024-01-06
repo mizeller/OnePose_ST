@@ -194,7 +194,7 @@ def inference_core(seq_dir):
             draw_box=len(inliers_crop) > 20,
             save_path=osp.join(paths["vis_box_dir"], f"{id}.jpg"),
         )
-
+        
     # Output video to visualize estimated poses:
     pose_estimation_demo_video: str = f"temp/demo_pose_{seq_dir.split('/')[-1]}.mp4"
     logger.info(
@@ -202,7 +202,25 @@ def inference_core(seq_dir):
     )
     vis_utils.make_video(
         paths["vis_box_dir"], pose_estimation_demo_video
+    )   
+    
+    ####################################################################################################
+    ######################## TODO - MAKE YOUR MODIFICATIONS HERE M######################################
+    ####################################################################################################
+    ... 
+    
+    # Output video to visualize estimated poses:
+    optimized_pose_estimation_demo_video: str = f"temp/demo_pose_optimized_{seq_dir.split('/')[-1]}.mp4"
+    logger.info(
+        f"OPTIMIZED POSE ESTIMATION DEMO VIDEO SAVED TO: {optimized_pose_estimation_demo_video}"
     )
+    vis_utils.make_video(
+        paths["vis_box_dir"], optimized_pose_estimation_demo_video
+    )
+    ####################################################################################################
+    ####################################################################################################
+
+    
     
     return 
 
