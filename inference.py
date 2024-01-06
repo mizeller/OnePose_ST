@@ -9,8 +9,8 @@ from loguru import logger
 import os
 from pathlib import Path
 from collections import defaultdict
-from cotracker.cotracker.utils.visualizer import Visualizer, read_video_from_path
-from cotracker.cotracker.predictor import CoTrackerPredictor, CoTrackerOnlinePredictor
+from submodules.CoTracker.cotracker.utils.visualizer import Visualizer, read_video_from_path
+from submodules.CoTracker.cotracker.predictor import CoTrackerPredictor
 
 
 os.environ[
@@ -49,20 +49,7 @@ class CONFIG:
         self.obj_name: str = "spot_rgb"  # "spot"
         self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}"
         # NOTE: there must exist a "color_full" sub-directory in ∀ data_dirs
-        self.data_dirs: List[str] = [
-            # "asus_00-test",
-            # "asus_01-test",
-            # "asus_02-test",
-            # "asus_03-test",
-            # "asus_04-test",
-            # "asus_05-test",
-            "asus_05_small-test",
-            # "asus_06-test",
-            # "asus_07-test",
-            # "spot_yt-test",
-            # "spot_yt_cropped-test",
-            # "cotrack-test"
-        ]
+        self.data_dirs: List[str] = ["cotrack-test"]
         self.sfm_model_dir: str = (
             f"{self.data_root}/sfm_model/outputs_softmax_loftr_loftr/{self.obj_name}"
         )
@@ -74,6 +61,17 @@ class CONFIG:
         with open("configs/experiment/inference_demo.yaml", "r") as f:
             onepose_config = yaml.load(f, Loader=yaml.FullLoader)
         return onepose_config["model"]
+
+
+####################################################################################################
+##########################TODO: refactor helper methods later ######################################
+####################################################################################################
+
+def transform_mkpts(transform, mkpts_query):
+    inliers_query_homo = np.c_[mkpts_query, np.ones(mkpts_query.shape[0])]
+    inliers_orig_homo = np.dot(inliers_query_homo, transform.T)
+    inliers_orig = inliers_orig_homo[:, :2] / inliers_orig_homo[:, 2, np.newaxis]
+    return inliers_orig
 
 
 ####################################################################################################
@@ -112,19 +110,11 @@ def inference_core(seq_dir, detection_counter: defaultdict):
     pred_poses = {}  # {id:[pred_pose, inliers]}
 
     queries = torch.empty(0, 3).cuda()  # replace this with your tensor
-
+    mkpts_cache = {} # 2D-3D correspondences cache
      
     for id in tqdm(range(len(dataset))):
         data = dataset[id]
         query_image = data["query_image"]
-
-        
-        # convert the query image from torch.tensor to array
-        # use the query array for the co-tracking algorithm
-    #    query_array = query_image.repeat(1, 3, 1, 1)
-    #    query_array = query_array.numpy()
-    #    query_array = np.transpose(query_array, (2, 3, 1))
-
         query_image_path = data["query_image_path"]
 
         if K is None:
@@ -134,58 +124,66 @@ def inference_core(seq_dir, detection_counter: defaultdict):
         if id == 0:
             logger.warning(f"Running local feature object detector for frame {id}")
             # Detect object by 2D local feature matching for the first frame:
-            _, inp_crop, K_crop, transformation_matrix = local_feature_obj_detector.detect(
+            _, query_crop, K_crop, transform = local_feature_obj_detector.detect(
                 query_image, query_image_path, K
             )
         else:
             # Use 3D bbox and previous frame's pose to yield current frame 2D bbox:
-            previous_frame_pose, inliers = pred_poses[id - 1]
+            previous_frame_pose, inliers_crop = pred_poses[id - 1]
 
-            if len(inliers) < 20:
+            if len(inliers_crop) < 20:
                 logger.warning(
                     f"Re-Running local feature object detector for frame {id}"
                 )
                 # Consider previous pose estimation failed, reuse local feature object detector:
-                _, inp_crop, K_crop, transformation_matrix = local_feature_obj_detector.detect(
+                _, query_crop, K_crop, transform = local_feature_obj_detector.detect(
                     query_image, query_image_path, K
                 )
             else:
                 (
                     _,
-                    inp_crop,
+                    query_crop,
                     K_crop,
-                    transformation_matrix
+                    transform,
                 ) = local_feature_obj_detector.previous_pose_detect(
                     query_image_path, K, previous_frame_pose, bbox3d
                 )
-
-        data.update({"query_image": inp_crop.cuda()})
+        data.update({"query_image": query_crop.cuda()})
 
         # Perform keypoint-free 2D-3D matching and then estimate object pose of query image by PnP:
         with torch.no_grad():
             match_2D_3D_model(data)
         mkpts_3d = data["mkpts_3d_db"].cpu().numpy()  # N*3
-        mkpts_query = data["mkpts_query_f"].cpu().numpy()  # N*2
-        pose_pred, _, inliers, _ = metric_utils.ransac_PnP(
+        mkpts_crop = data["mkpts_query_f"].cpu().numpy()  # N*2
+        pose_pred, _, inliers_crop, _ = metric_utils.ransac_PnP(
             K_crop,
-            mkpts_query,
+            mkpts_crop,
             mkpts_3d,
             scale=1000,
             pnp_reprojection_error=7,
             img_hw=[512, 512],
             use_pycolmap_ransac=True,
         )
-        logger.debug(f"Pose estimation inliers: {len(inliers)} for frame {id}")
-        pred_poses[id] = [pose_pred, inliers]
-        for inlier in inliers:
-            # only use inliers from every 2nd frame; frequently ran into CUDA OOM errors otherwise...
-            x, y = mkpts_query[inlier]
-            M_inv = np.linalg.inv(transformation_matrix)
-            original_coords = np.dot(M_inv, np.array([x,y, 1]))
-            x_orig = original_coords[0] / original_coords[2]
-            y_orig = original_coords[1] / original_coords[2]
-            queries = torch.cat([queries, torch.tensor([[int(id), int(x_orig), int(y_orig)]], device='cuda')], dim=0)
-            detection_counter[tuple(mkpts_3d[inlier])] += 1
+        logger.debug(f"Pose estimation inliers: {len(inliers_crop)} for frame {id}")
+        pred_poses[id] = [pose_pred, inliers_crop]
+
+        # mkpts_query[inliers] = inliers in cropped image
+        # inliers_orig = inliers in original image
+        inliers_orig = transform_mkpts(np.linalg.inv(transform), mkpts_crop[inliers_crop])
+        inliers_orig_w_id = np.c_[np.ones(inliers_orig.shape[0]) * int(id), inliers_orig] # add id to inliers
+        queries = torch.cat((queries, torch.from_numpy(inliers_orig_w_id).float().cuda()), dim=0)
+
+        mkpts_cache[id] = {
+            "K_crop": K_crop,
+            "transform": transform,
+            "mkpts_3d": mkpts_3d,
+            "mkpts_crop": mkpts_crop,
+            "inliers_orig": inliers_orig
+        }  
+
+        # update detection_counter
+        for i in inliers_crop:
+            detection_counter[tuple(mkpts_3d[i])] += 1
 
         # visualise the detected keypoints on the 3D pointcloud and the query image.
         # ransac_PnP operates on these sets of keypoints
@@ -193,10 +191,10 @@ def inference_core(seq_dir, detection_counter: defaultdict):
             vis_utils.visualize_2D_3D_keypoints(
                 path=Path(f"temp/{local_feature_obj_detector.query_id}"),
                 data=data,
-                inp_crop=inp_crop,
-                inliers=inliers,
+                inp_crop=query_crop,
+                inliers=inliers_crop,
                 mkpts_3d=mkpts_3d,
-                mkpts_query=mkpts_query,
+                mkpts_query=mkpts_crop,
             )
 
         # Visualize:
@@ -205,14 +203,17 @@ def inference_core(seq_dir, detection_counter: defaultdict):
             K,
             image_path=query_image_path,
             box3d=bbox3d,
-            draw_box=len(inliers) > 20,
+            draw_box=len(inliers_crop) > 20,
             save_path=osp.join(paths["vis_box_dir"], f"{id}.jpg"),
         )
 
     # Output video to visualize estimated poses:
-    logger.info(f"Generate demo video begin...")
+    pose_estimation_demo_video: str = f"temp/demo_pose_{seq_dir.split('/')[-1]}.mp4"
+    logger.info(
+        f"POSE ESTIMATION DEMO VIDEO SAVED TO: {pose_estimation_demo_video}"
+    )
     vis_utils.make_video(
-        paths["vis_box_dir"], f"temp/demo_{seq_dir.split('/')[-1]}.mp4"
+        paths["vis_box_dir"], pose_estimation_demo_video
     )
     
     # reset cuda cache for co-tracker 
@@ -221,7 +222,7 @@ def inference_core(seq_dir, detection_counter: defaultdict):
     video = read_video_from_path(f"{seq_dir}/clip.mp4")
     video = torch.from_numpy(video).permute(0, 3, 1, 2)[None].float() 
     
-    model = CoTrackerPredictor()
+    model = CoTrackerPredictor(checkpoint='submodules/CoTracker/checkpoints/cotracker2.pth')
     video = video.cuda()
     model = model.cuda()
     
@@ -229,7 +230,7 @@ def inference_core(seq_dir, detection_counter: defaultdict):
     pred_tracks, pred_visibility = model(video, queries=queries[None], backward_tracking=True)
     vis = Visualizer(
     save_dir='temp/',
-    linewidth=6,
+    linewidth=1,
     mode='cool',
     tracks_leave_trace=-1
     )
@@ -269,4 +270,6 @@ if __name__ == "__main__":
     global cfg
     cfg: CONFIG = CONFIG()
     os.system(f"rm -rf temp/*")
+    if cfg.DBG:
+        Path("temp/debug").mkdir(exist_ok=True, parents=True)
     main()
