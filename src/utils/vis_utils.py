@@ -106,7 +106,7 @@ def add_pointcloud_to_vis3d(pointcloud_pth, dump_dir, save_name):
     vis3d.add_point_cloud(pointcloud_pth, name="filtered_pointcloud")
 
 
-def save_demo_image(pose_pred, K, image_path, box3d, draw_box=True, save_path=None):
+def save_demo_image(pose_pred, K, image_path, box3d, draw_box=True, save_path=None, color="b"):
     """
     Project 3D bbox by predicted pose and visualize
     """
@@ -117,7 +117,7 @@ def save_demo_image(pose_pred, K, image_path, box3d, draw_box=True, save_path=No
 
     if draw_box:
         reproj_box_2d = reproj(K, pose_pred, box3d)
-        draw_3d_box(image_full, reproj_box_2d, color="b", linewidth=10)
+        draw_3d_box(image_full, reproj_box_2d, color=color, linewidth=10)
 
     if save_path is not None:
         Path(save_path).parent.mkdir(exist_ok=True, parents=True)
