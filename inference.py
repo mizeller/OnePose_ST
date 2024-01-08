@@ -103,9 +103,7 @@ class MKPT:
     def get_queries(self):
         """Convert the inliers to the format expected by CoTracker."""
         queries = (
-            torch.from_numpy(
-                np.c_[np.ones(self.inliers_orig.shape[0]), self.inliers_orig]
-            )
+            torch.from_numpy(np.c_[np.ones(self.mkpts_orig.shape[0]), self.mkpts_orig])
             .float()
             .cuda()
         )
@@ -474,7 +472,7 @@ def inference_core(seq_dir):
             queries = torch.cat((queries, _queries), dim=0)
 
             # combine previous 3D key points into 3D key points array
-            _mkpts_3d = _mkpt.mkpts_3d[_mkpt.inliers]
+            _mkpts_3d = _mkpt.mkpts_3d
             mkpts_3d_previous = np.append(mkpts_3d_previous, _mkpts_3d, axis=0)
 
             i += 1
