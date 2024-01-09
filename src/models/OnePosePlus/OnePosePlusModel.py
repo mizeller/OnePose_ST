@@ -2,7 +2,7 @@ from loguru import logger
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops.einops import rearrange, repeat
+from einops.einops import rearrange
 
 from src.utils.profiler import PassThroughProfiler
 
@@ -77,9 +77,9 @@ class OnePosePlus_model(nn.Module):
 
         self.loftr_backbone_pretrained = self.config["loftr_backbone"]["pretrained"]
         if self.loftr_backbone_pretrained is not None:
-            logger.info(
-                f"Load pretrained backbone from {self.loftr_backbone_pretrained}"
-            )
+            # logger.info(
+            #     f"Load pretrained backbone from {self.loftr_backbone_pretrained}"
+            # )
             ckpt = torch.load(self.loftr_backbone_pretrained, "cpu")["state_dict"]
             for k in list(ckpt.keys()):
                 if "backbone" in k:

@@ -95,7 +95,9 @@ def visualize_pointcloud(
     keypoints3d_cpu = keypoints3d.detach().clone().cpu().numpy().reshape(-1, 3)
     pcd.points = o3d.utility.Vector3dVector(keypoints3d_cpu)
     Path(f"temp/model").mkdir(parents=True, exist_ok=True)
-    path: str = f"temp/model/3d_keypoints_{v}.ply" if v else f"temp/model/3d_keypoints.ply"
+    path: str = (
+        f"temp/model/3d_keypoints_{v}.ply" if v else f"temp/model/3d_keypoints.ply"
+    )
     logger.info(f"Saving pointcloud to {path}")
     o3d.io.write_point_cloud(path, pcd)
     return
@@ -106,7 +108,9 @@ def add_pointcloud_to_vis3d(pointcloud_pth, dump_dir, save_name):
     vis3d.add_point_cloud(pointcloud_pth, name="filtered_pointcloud")
 
 
-def save_demo_image(pose_pred, K, image_path, box3d, draw_box=True, save_path=None, color="b"):
+def save_demo_image(
+    pose_pred, K, image_path, box3d, draw_box=True, save_path=None, color="b"
+):
     """
     Project 3D bbox by predicted pose and visualize
     """
@@ -140,15 +144,16 @@ def make_video(image_path, output_video_path):
         image = cv2.imread(str(Path(image_path) / image_name))
         video.write(image)
     video.release()
-    logger.info(f"Demo vido saved to: {output_video_path}")
 
 
-def visualize_2D_3D_keypoints(path: Path, data, inp_crop, inliers, mkpts_3d, mkpts_query):
+def visualize_2D_3D_keypoints(
+    path: Path, data, inp_crop, inliers, mkpts_3d, mkpts_query
+):
     ## Visualize 3D keypoints ##
     pcd = o3d.geometry.PointCloud()
     keypoints3d_cpu = data["mkpts_3d_db"].detach().clone().cpu().numpy()
     pcd.points = o3d.utility.Vector3dVector(keypoints3d_cpu)
-    o3d.io.write_point_cloud(str(path/"mkpts_3d_db.ply"), pcd)
+    o3d.io.write_point_cloud(str(path / "mkpts_3d_db.ply"), pcd)
 
     ## Visualize 2D keypoints ##
     query_image = inp_crop.squeeze().cpu().detach().numpy()
@@ -158,7 +163,7 @@ def visualize_2D_3D_keypoints(path: Path, data, inp_crop, inliers, mkpts_3d, mkp
     for point in mkpts_query:
         x, y = point.astype(int)
         cv2.circle(query_image, (x, y), 3, (0, 255, 0), -1)
-    cv2.imwrite(str(path/"mkpts_query.png"), query_image)
+    cv2.imwrite(str(path / "mkpts_query.png"), query_image)
 
     ## Visualize 2D inliers ##
     inliers_3d = np.zeros((len(inliers), 3))

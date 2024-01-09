@@ -2,18 +2,13 @@ import os.path as osp
 import cv2
 import torch
 import numpy as np
-import natsort
 import pytorch_lightning as pl
-
 from src.KeypointFreeSfM.loftr_for_sfm import LoFTR_for_OnePose_Plus, default_cfg
 from src.utils.colmap.read_write_model import read_model
 from src.utils.data_utils import get_K_crop_resize, get_image_crop_resize
 from src.utils.vis_utils import reproj
-from loguru import logger
 from pathlib import Path
 import uuid
-from submodules.LoFTR.src.utils.plotting import make_matching_figure
-import matplotlib.cm as cm
 
 cfgs = {
     "model": {

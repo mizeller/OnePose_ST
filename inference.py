@@ -7,13 +7,11 @@ import demo
 import os
 from pathlib import Path
 import pickle
-import cv2
 import numpy as np
 import torch
 
-from src.utils import data_utils
-from src.utils import vis_utils
-from src.utils import metric_utils
+from src.utils import data_utils, vis_utils, metric_utils, data_io
+from src.utils.optimization_utils import MKPT
 from src.datasets.OnePosePlus_inference_dataset import OnePosePlusInferenceDataset
 from src.inference import inference_OnePosePlus
 from src.local_feature_object_detector.local_feature_2D_detector import (
@@ -44,13 +42,19 @@ class CONFIG:
         self.obj_name: str = "spot_rgb"  # "spot"
         self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}"
         # NOTE: there must exist a "color_full" sub-directory in ∀ data_dirs
-        self.data_dirs: List[str] = ["cotrack-test"]
+        self.data_dirs: List[str] = ["asus_03-test"]
         self.sfm_model_dir: str = (
             f"{self.data_root}/sfm_model/outputs_softmax_loftr_loftr/{self.obj_name}"
         )
         self.datamodule = CONFIG.DATAMODULE()
         self.model: dict = self._get_model()
         self.DBG: bool = False
+
+        # pose estimation optimization meta parameters
+        self.temp_thresh: int = 5  # time horizon for tracking & initialization phase
+        self.inliers_only: bool = (
+            False  # use only the inliers for tracking OR all previous key points
+        )
 
     def _get_model(self) -> dict:
         with open("configs/experiment/inference_demo.yaml", "r") as f:
@@ -61,229 +65,6 @@ class CONFIG:
 ####################################################################################################
 ##########################TODO: refactor helper methods later ######################################
 ####################################################################################################
-class MKPT:
-    def __init__(self, K_crop, K, transform, mkpts_3d, mkpts_crop, inliers):
-        """
-        K_orig          (3,3)   camera intrinsics matrix of original image
-        K_crop          (3,3)   camera intrinsics matrix of cropped image
-
-        transform       (3,3)   transform matrix from original image to cropped image
-
-        mkpts_3d        (N,3)   3D key points in pointcloud
-
-        mkpts_crop      (N,2)   2D key points in cropped image
-        mkpts_orig      (N,2)   2D key points in original image
-
-        inliers         (M,1)   list of indices corresponding to inliers in mkpts_crop and mkpts_3d
-
-        inliers_crop    (M,2)   inliers in cropped image
-        inliers_orig    (M,2)   inliers in original image
-
-        queries         (M,3)   self.inliers_orig in format expected by CoTracker
-        """
-        # set initially
-        self.K_orig = K
-        self.K_crop = K_crop
-        self.transform = transform
-        self.inliers = inliers
-        self.mkpts_crop = mkpts_crop
-        self.mkpts_orig = self.map_to_original(self.mkpts_crop)
-        self.mkpts_3d = mkpts_3d
-        self.inliers_crop = mkpts_crop[inliers]
-        self.inliers_orig = self.map_to_original(self.inliers_crop)
-
-        # set later
-        self.img_orig = None
-        self.img_crop = None
-        self.mkpts_orig_tracked = None
-        self.mkpts_crop_tracked = None
-        self.inliers_crop_optimised = None
-        self.inliers_orig_optimised = None
-
-    def get_queries(self):
-        """Convert the inliers to the format expected by CoTracker."""
-        queries = (
-            torch.from_numpy(np.c_[np.ones(self.mkpts_orig.shape[0]), self.mkpts_orig])
-            .float()
-            .cuda()
-        )
-        return queries
-
-    def set_images(self, img_path: str = "") -> None:
-        img_orig = cv2.imread(img_path)
-        img_crop = cv2.warpAffine(
-            img_orig, self.transform[:2, :], (512, 512), flags=cv2.INTER_LINEAR
-        )
-        self.img_orig = img_orig
-        self.img_crop = img_crop
-        return
-
-    def set_new_mkpts(self, predicted_tracks: torch.Tensor) -> None:
-        """Extract the new key points in the current frame from the predicted tracks."""
-        self.mkpts_orig_tracked = np.squeeze(
-            predicted_tracks[:, -1].cpu().numpy(), axis=0
-        )
-        self.mkpts_crop_tracked = self.map_to_crop(self.mkpts_orig_tracked)
-
-    def set_new_inliers(self, inliers_optimised: List[int]) -> None:
-        # concat the old mkpts with the tracked mkpts
-        mkpts_injected = np.concatenate(
-            (self.mkpts_crop, self.mkpts_crop_tracked), axis=0
-        )
-        self.inliers_crop_optimised = mkpts_injected[inliers_optimised]
-        self.inliers_orig_optimised = self.map_to_original(self.inliers_crop_optimised)
-
-    def _get_img_w_mkpts(
-        self, img_path: str, mkpts: np.ndarray, color: tuple = (0, 255, 0), r: int = 3
-    ):
-        query_image = cv2.imread(img_path)
-        for point in mkpts:
-            x, y = point.astype(int)
-            cv2.circle(query_image, (x, y), r, color, -1)
-        return query_image
-
-    def map_to_original(self, mkpts_crop):
-        """Map points on the cropped image to the original image."""
-        inv_transform = np.linalg.inv(self.transform)
-        mkpts_crop_homogeneous = np.c_[mkpts_crop, np.ones(mkpts_crop.shape[0])]
-        mkpts_orig_homogeneous = np.dot(mkpts_crop_homogeneous, inv_transform.T)
-        mkpts_orig = (
-            mkpts_orig_homogeneous[:, :2] / mkpts_orig_homogeneous[:, 2, np.newaxis]
-        )
-        return mkpts_orig
-
-    def map_to_crop(self, mkpts_orig):
-        """Map points on the original image to the cropped image."""
-        mkpts_orig_homogeneous = np.c_[mkpts_orig, np.ones(mkpts_orig.shape[0])]
-        mkpts_crop_homogeneous = np.dot(mkpts_orig_homogeneous, self.transform.T)
-        mkpts_crop = (
-            mkpts_crop_homogeneous[:, :2] / mkpts_crop_homogeneous[:, 2, np.newaxis]
-        )
-        return mkpts_crop
-
-    def debug(self, out_path: Path) -> None:
-        blue, green, red = (255, 0, 0), (0, 255, 0), (0, 0, 255)
-
-        # img paths, that are save in this method
-        query_orig_path: str = str(out_path / "orig" / "00_query_orig.png")
-        query_crop_path: str = str(out_path / "crop" / "00_query_crop.png")
-        query_orig_mkpts_old_path: str = str(
-            out_path / "orig" / "01_query_orig_mkpts_old.png"
-        )
-        query_crop_mkpts_old_path: str = str(
-            out_path / "crop" / "01_query_crop_mkpts_old.png"
-        )
-        query_orig_mkpts_inliers_path: str = str(
-            out_path / "orig" / "02_query_orig_mkpts_inliers_old.png"
-        )
-        query_crop_mkpts_inliers_path: str = str(
-            out_path / "orig" / "02_query_crop_mkpts_inliers_old.png"
-        )
-        query_orig_inliers_path: str = str(
-            out_path / "orig" / "02_query_orig_inliers_old.png"
-        )
-        query_crop_inliers_path: str = str(
-            out_path / "crop" / "02_query_crop_inliers_old.png"
-        )
-        query_orig_mkpts_new_path: str = str(
-            out_path / "orig" / "03_query_orig_mkpts_old.png"
-        )
-        query_crop_mkpts_new_path: str = str(
-            out_path / "crop" / "03_query_crop_mkpts_old.png"
-        )
-        query_orig_inliers_new_path: str = str(
-            out_path / "orig" / "04_query_orig_inliers_old.png"
-        )
-        query_crop_inliers_new_path: str = str(
-            out_path / "crop" / "04_query_crop_inliers_old.png"
-        )
-
-        # save original and cropped image
-        cv2.imwrite(query_orig_path, self.img_orig)
-        cv2.imwrite(query_crop_path, self.img_crop)
-
-        # plot old key points in blue
-        query_orig_mkpts_old = self._get_img_w_mkpts(
-            img_path=query_orig_path, mkpts=self.mkpts_orig, color=blue
-        )
-        query_crop_mkpts_old = self._get_img_w_mkpts(
-            img_path=query_crop_path, mkpts=self.mkpts_crop, color=blue
-        )
-        cv2.imwrite(query_orig_mkpts_old_path, query_orig_mkpts_old)
-        cv2.imwrite(query_crop_mkpts_old_path, query_crop_mkpts_old)
-
-        # plot old inliers in green
-        query_orig_inliers_old = self._get_img_w_mkpts(
-            img_path=query_orig_path,
-            mkpts=self.map_to_original(self.mkpts_crop[self.inliers]),
-            color=green,
-        )
-        query_orig_mkpts_inliers_old = self._get_img_w_mkpts(
-            img_path=query_orig_mkpts_old_path,
-            mkpts=self.map_to_original(self.mkpts_crop[self.inliers]),
-            color=green,
-        )
-        query_crop_inliers_old = self._get_img_w_mkpts(
-            img_path=query_crop_path, mkpts=self.mkpts_crop[self.inliers], color=green
-        )
-        query_crop_mkpts_inliers_old = self._get_img_w_mkpts(
-            img_path=query_crop_mkpts_old_path,
-            mkpts=self.mkpts_crop[self.inliers],
-            color=green,
-        )
-        # inliers only
-        cv2.imwrite(query_orig_inliers_path, query_orig_inliers_old)
-        cv2.imwrite(query_crop_inliers_path, query_crop_inliers_old)
-        # inliers + old key points
-        cv2.imwrite(
-            query_orig_mkpts_inliers_path,
-            query_orig_mkpts_inliers_old,
-        )
-        cv2.imwrite(
-            query_crop_mkpts_inliers_path,
-            query_crop_mkpts_inliers_old,
-        )
-
-        # plot the injected key points in red, onto the image w/ the original key points in blue
-        query_orig_mkpts_new = self._get_img_w_mkpts(
-            img_path=query_orig_mkpts_old_path,
-            mkpts=self.mkpts_orig_tracked,
-            color=red,
-        )
-        cv2.imwrite(query_orig_mkpts_new_path, query_orig_mkpts_new)
-        query_crop_mkpts_new = self._get_img_w_mkpts(
-            img_path=query_crop_mkpts_old_path,
-            mkpts=self.mkpts_crop_tracked,
-            color=red,
-        )
-        cv2.imwrite(query_crop_mkpts_new_path, query_crop_mkpts_new)
-
-        # plot the optimized inliers in red, onto the image w/ the original inliers in green
-        query_orig_inliers_new = self._get_img_w_mkpts(
-            img_path=query_orig_inliers_path,
-            mkpts=self.inliers_orig_optimised,
-            color=red,
-        )
-        cv2.imwrite(query_orig_inliers_new_path, query_orig_inliers_new)
-        query_crop_inliers_new = self._get_img_w_mkpts(
-            img_path=query_crop_inliers_path,
-            mkpts=self.inliers_crop_optimised,
-            color=red,
-        )
-        cv2.imwrite(query_crop_inliers_new_path, query_crop_inliers_new)
-
-
-def read_video_from_path(directory):
-    """
-    Reads all images from a directory and returns a numpy array of shape (n_frames, height, width, 3)
-    NOTE: the directory must contain ONLY images.
-    """
-    frames = []
-    for filename in sorted(Path(directory).iterdir()):
-        img = cv2.imread(str(filename))
-        frames.append(img)
-
-    return np.stack(frames)
 
 
 ####################################################################################################
@@ -292,6 +73,7 @@ def read_video_from_path(directory):
 
 def inference_core(seq_dir):
     """Inference core function for OnePosePlus."""
+    logger.warning(f"Running inference on {seq_dir}")
     img_list, paths = demo.get_default_paths(cfg.data_root, seq_dir, cfg.sfm_model_dir)
     dataset = OnePosePlusInferenceDataset(
         paths["sfm_dir"],
@@ -319,7 +101,11 @@ def inference_core(seq_dir):
     bbox3d = np.loadtxt(paths["bbox3d_path"])
     pred_poses = {}  # {id:[pred_pose, inliers]}
     mkpts_cache = []
-    if False:
+    test_dir: str = seq_dir.split("/")[-1]
+    Path("temp/original_pose_predictions").mkdir(exist_ok=True, parents=True)
+    # only run pose estimation if cache does not exist
+    if not Path(f"cache_{test_dir}.pkl").exists():
+        logger.warning("running pose estimation...")
         for id in tqdm(range(len(dataset))):
             data = dataset[id]
             query_image = data["query_image"]
@@ -409,39 +195,35 @@ def inference_core(seq_dir):
                 image_path=query_image_path,
                 box3d=bbox3d,
                 draw_box=len(inliers_crop) > 20,
-                save_path=osp.join(paths["vis_box_dir"], f"{id}.jpg"),
+                save_path=f"temp/original_pose_predictions/{id}.jpg",
             )
 
         # Output video to visualize estimated poses:
-        pose_estimation_demo_video: str = f"temp/demo_pose_{seq_dir.split('/')[-1]}.mp4"
-        logger.info(
-            f"POSE ESTIMATION DEMO VIDEO SAVED TO: {pose_estimation_demo_video}"
+        vis_utils.make_video(
+            "temp/original_pose_predictions", f"temp/demo_pose_{test_dir}.mp4"
         )
-        vis_utils.make_video(paths["vis_box_dir"], pose_estimation_demo_video)
 
         # store variables to disk to debug cotracker separately
         cache = {"mkpts_cache": mkpts_cache, "pred_poses": pred_poses}
-        with open("cache.pkl", "wb") as f:
+        with open(f"cache_{test_dir}.pkl", "wb") as f:
             pickle.dump(cache, f)
 
+    os.system(f"rm -rf temp/original_pose_predictions")
     ####################################################################################################
     ####################################################################################################
 
-    logger.error("Running CoTracker")
+    logger.warning("optimizing pose estimation...")
+    Path("temp/optimized_pose_predictions").mkdir(exist_ok=True, parents=True)
     # load required variables from disk...
-    with open("cache.pkl", "rb") as f:
+    with open(f"cache_{test_dir}.pkl", "rb") as f:
         cache = pickle.load(f)
     mkpts_cache = cache["mkpts_cache"]
     pred_poses = cache["pred_poses"]
-
-    temp_thresh: int = 5  # time horizon for tracking & initialization phase
     tracker: CoTrackerPredictor = CoTrackerPredictor(
         checkpoint="submodules/CoTracker/checkpoints/cotracker2.pth"
     )
     tracker = tracker.cuda()
-    # NOTE: this assumes there is a clip.mp4 in the sequence directory, which corresponds to the frames
-    # in the color_full directory; maybe change code, to use the images from the color_full directory instead...
-    video = read_video_from_path(Path(f"{seq_dir}/color_full"))
+    video = data_io.read_video_from_path(Path(f"{seq_dir}/color_full"))
     video = torch.from_numpy(video).permute(0, 3, 1, 2)[None].float()
     queries: torch.Tensor = torch.empty(0, 3).cuda()
 
@@ -449,30 +231,32 @@ def inference_core(seq_dir):
         mkpt: MKPT = mkpts_cache[frame_id]
         query_image_path = dataset[frame_id]["query_image_path"]
         # don't optimize frames in initialization phase, use previous pose estimation
-        if frame_id < temp_thresh:
+        if frame_id < cfg.temp_thresh:
             vis_utils.save_demo_image(
                 pred_poses[frame_id][0],
                 mkpt.K_orig,  # re-use K from previous pose estimation loop
                 image_path=query_image_path,
                 box3d=bbox3d,
                 draw_box=len(pred_poses[frame_id][1]) > 20,
-                save_path=f"temp/optimized/{frame_id}.jpg",
+                save_path=f"temp/optimized_pose_predictions/{frame_id}.jpg",
                 color="r",
             )
             continue
         mkpt.set_images(img_path=query_image_path)
         mkpts_3d_previous = np.empty((0, 3))
         i = 0
-        for _mkpt in mkpts_cache[frame_id - temp_thresh : frame_id]:
+        for _mkpt in mkpts_cache[frame_id - cfg.temp_thresh : frame_id]:
             # combine previous inliers into query tensor
-            _queries = _mkpt.get_queries()
+            _queries = _mkpt.get_queries(cfg.inliers_only)
             _queries[
                 :, 0
             ] = i  # replace frame id wrt original video to frame id wrt sliced video)
             queries = torch.cat((queries, _queries), dim=0)
 
             # combine previous 3D key points into 3D key points array
-            _mkpts_3d = _mkpt.mkpts_3d
+            _mkpts_3d = (
+                _mkpt.mkpts_3d[_mkpt.inliers] if cfg.inliers_only else _mkpt.mkpts_3d
+            )
             mkpts_3d_previous = np.append(mkpts_3d_previous, _mkpts_3d, axis=0)
 
             i += 1
@@ -482,14 +266,14 @@ def inference_core(seq_dir):
         ), "The number of query points (= 2D kpts) and 3D kpts should match!"
 
         # track the queries a.k.a previous inliers to current frame
-        sliced_video = video[:, frame_id - temp_thresh : frame_id + 1]
+        sliced_video = video[:, frame_id - cfg.temp_thresh : frame_id + 1]
         sliced_video = sliced_video.cuda()  # load sliced video into cuda memory
         assert (
-            sliced_video.shape[1] == temp_thresh + 1
+            sliced_video.shape[1] == cfg.temp_thresh + 1
         ), "Sliced video should temp_thresh frames +1 (current) frame"
         assert np.array_equal(
             mkpt.img_orig, sliced_video[0, -1].permute(1, 2, 0).cpu().numpy()
-        ), "The first frame of sliced video should be the same as the original image"
+        ), "The last frame of sliced video should be the same as the original image of the current frame"
 
         _tracks, _visibility = tracker(
             sliced_video, queries=queries[None], backward_tracking=True
@@ -517,10 +301,6 @@ def inference_core(seq_dir):
 
         mkpt.set_new_inliers(inliers_optimized)
 
-        logger.debug(
-            f"Pose estimation inliers: {len(inliers_optimized)} for frame {frame_id}"
-        )
-
         # TODO: some numerical analysis if the optimized pose is better than before..
 
         # Visualize:
@@ -530,18 +310,18 @@ def inference_core(seq_dir):
             image_path=query_image_path,
             box3d=bbox3d,
             draw_box=len(inliers_optimized) > 20,
-            save_path=f"temp/optimized/{frame_id}.jpg",
+            save_path=f"temp/optimized_pose_predictions/{frame_id}.jpg",
             color="r",
         )
-
-        if frame_id % 10 == 0:
+        # save some debug frames and short tracking videos if DBG is True
+        if cfg.DBG and frame_id % 10 == 0:
             tmp_path: Path = Path(f"temp/frame_{frame_id}")
             tmp_path.mkdir(exist_ok=True, parents=True)
             Path(tmp_path / "orig").mkdir(exist_ok=True, parents=True)
-            Path(tmp_path / "crop").mkdir(exist_ok=True, parents=True)  
+            Path(tmp_path / "crop").mkdir(exist_ok=True, parents=True)
 
             mkpt.debug(out_path=tmp_path)
-            # TODO: somehow the video is BGR instead of RGB - fix this!
+
             vis = Visualizer(
                 save_dir=f"temp/frame_{frame_id}",
                 linewidth=1,
@@ -549,7 +329,7 @@ def inference_core(seq_dir):
                 tracks_leave_trace=-1,
             )
             vis.visualize(
-                video=sliced_video,
+                video=sliced_video[:, :, [2, 1, 0], :, :],  # BGR -> RGB
                 tracks=_tracks,
                 visibility=_visibility,
                 filename=f"tracked_seq",
@@ -558,28 +338,20 @@ def inference_core(seq_dir):
         # reset queries for next frame
         queries = torch.empty(0, 3).cuda()
 
-        # Output video to visualize estimated poses:
-    optimized_pose_estimation_demo_video: str = (
-        f"temp/demo_optimized_pose_{seq_dir.split('/')[-1]}.mp4"
+    vis_utils.make_video(
+        "temp/optimized_pose_predictions", f"temp/demo_optimized_pose_{test_dir}.mp4"
     )
-    logger.info(
-        f"POSE ESTIMATION DEMO VIDEO SAVED TO: {optimized_pose_estimation_demo_video}"
-    )
-    vis_utils.make_video("temp/optimized", optimized_pose_estimation_demo_video)
-
-    ####################################################################################################
-    ####################################################################################################
+    os.system(f"rm -rf temp/optimized_pose_predictions")
     return
 
 
 def main() -> None:
     # loop over all data_dirs specified in the CONFIG class
-    for test_dir in tqdm(cfg.data_dirs, total=len(cfg.data_dirs)):
+    for test_dir in cfg.data_dirs:
         seq_dir = osp.join(cfg.data_root, test_dir)
-        logger.info(f"Eval {seq_dir}")
         inference_core(seq_dir)
 
-    logger.info("Done")
+    logger.warning("Done")
     return
 
 
@@ -587,9 +359,6 @@ if __name__ == "__main__":
     global cfg
     cfg: CONFIG = CONFIG()
     os.system(f"rm -rf temp/*")
-    Path("temp/optimized").mkdir(exist_ok=True, parents=True)
     if cfg.DBG:
         Path("temp/debug").mkdir(exist_ok=True, parents=True)
     main()
-    # remove the temp/optimized directory, just keep the video (more efficienc scp to loacl machine)
-    os.system(f"rm -rf temp/optimized")

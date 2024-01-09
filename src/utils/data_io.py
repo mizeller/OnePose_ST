@@ -7,6 +7,7 @@ import torch
 from collections import defaultdict
 import matplotlib.pyplot as plt
 import open3d as o3d
+from pathlib import Path
 
 
 def save_obj(obj, name):
@@ -18,6 +19,18 @@ def load_obj(name):
     with open(name, "rb") as f:
         return pickle.load(f)
 
+def read_video_from_path(directory):
+    """
+    Reads all images from a directory and returns a numpy array of shape (n_frames, height, width, 3)
+    NOTE 1: the directory must contain ONLY images.
+    NOTE 2: the video is in BGR format (OpenCV default)
+    """
+    frames = []
+    for filename in sorted(Path(directory).iterdir()):
+        img = cv2.imread(str(filename))
+        frames.append(img)
+
+    return np.stack(frames)
 
 def load_h5(file_path, transform_slash=True, parallel=False):
     """load the whole h5 file into memory (not memmaped)"""

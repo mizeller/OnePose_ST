@@ -30,7 +30,7 @@ args = {
 def build_model(model_configs, ckpt_path) -> OnePosePlus_model:
     match_model: OnePosePlus_model = OnePosePlus_model(model_configs)
     # load checkpoints
-    logger.info(f"Load ckpt:{ckpt_path}")
+    # logger.info(f"Load ckpt:{ckpt_path}")
     state_dict = torch.load(ckpt_path, map_location="cpu")["state_dict"]
     for k in list(state_dict.keys()):
         state_dict[k.replace("matcher.", "")] = state_dict.pop(k)
