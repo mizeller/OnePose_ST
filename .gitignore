@@ -239,3 +239,4 @@ pretrained
 .history
 .hydra/**
 scratch/
+*.pkl

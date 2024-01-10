@@ -9,6 +9,7 @@ from pathlib import Path
 import pickle
 import numpy as np
 import torch
+from collections import defaultdict
 
 from src.utils import data_utils, vis_utils, metric_utils, data_io
 from src.utils.optimization_utils import MKPT
@@ -42,19 +43,20 @@ class CONFIG:
         self.obj_name: str = "spot_rgb"  # "spot"
         self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}"
         # NOTE: there must exist a "color_full" sub-directory in ∀ data_dirs
-        self.data_dirs: List[str] = ["asus_03-test"]
+        self.data_dirs: List[str] = ["spot_yt_cropped-test"]
         self.sfm_model_dir: str = (
             f"{self.data_root}/sfm_model/outputs_softmax_loftr_loftr/{self.obj_name}"
         )
         self.datamodule = CONFIG.DATAMODULE()
         self.model: dict = self._get_model()
-        self.DBG: bool = False
+        self.debug_pose_estimation: bool = False
 
         # pose estimation optimization meta parameters
         self.temp_thresh: int = 5  # time horizon for tracking & initialization phase
         self.inliers_only: bool = (
-            False  # use only the inliers for tracking OR all previous key points
+            True  # use only the inliers for tracking OR all previous key points
         )
+        self.debug_tracking: bool = True
 
     def _get_model(self) -> dict:
         with open("configs/experiment/inference_demo.yaml", "r") as f:
@@ -71,7 +73,7 @@ class CONFIG:
 ####################################################################################################
 
 
-def inference_core(seq_dir):
+def inference_core(seq_dir, detection_counter: defaultdict) -> defaultdict:
     """Inference core function for OnePosePlus."""
     logger.warning(f"Running inference on {seq_dir}")
     img_list, paths = demo.get_default_paths(cfg.data_root, seq_dir, cfg.sfm_model_dir)
@@ -84,14 +86,14 @@ def inference_core(seq_dir):
         df=cfg.datamodule.df,
         pad=cfg.datamodule.pad3D,
         # n_images=3, # consider all images
-        DBG=cfg.DBG,
+        DBG=cfg.debug_pose_estimation,
     )
     local_feature_obj_detector: LocalFeatureObjectDetector = LocalFeatureObjectDetector(
         sfm_ws_dir=paths["sfm_ws_dir"],
         output_results=True,
         detect_save_dir=paths["vis_detector_dir"],
         K_crop_save_dir=paths["vis_detector_dir"],
-        DBG=cfg.DBG,
+        DBG=cfg.debug_pose_estimation,
     )
     match_2D_3D_model: OnePosePlus_model = inference_OnePosePlus.build_model(
         cfg.model["OnePosePlus"], cfg.model["pretrained_ckpt"]
@@ -104,7 +106,7 @@ def inference_core(seq_dir):
     test_dir: str = seq_dir.split("/")[-1]
     Path("temp/original_pose_predictions").mkdir(exist_ok=True, parents=True)
     # only run pose estimation if cache does not exist
-    if not Path(f"cache_{test_dir}.pkl").exists():
+    if True:  # not Path(f"cache_{test_dir}.pkl").exists():
         logger.warning("running pose estimation...")
         for id in tqdm(range(len(dataset))):
             data = dataset[id]
@@ -116,7 +118,7 @@ def inference_core(seq_dir):
 
             # Detect object:
             if id == 0:
-                logger.warning(f"Running local feature object detector for frame {id}")
+                # logger.warning(f"Running local feature object detector for frame {id}")
                 # Detect object by 2D local feature matching for the first frame:
                 _, query_crop, K_crop, transform = local_feature_obj_detector.detect(
                     query_image, query_image_path, K
@@ -126,9 +128,9 @@ def inference_core(seq_dir):
                 previous_frame_pose, inliers_crop = pred_poses[id - 1]
 
                 if len(inliers_crop) < 20:
-                    logger.warning(
-                        f"Re-Running local feature object detector for frame {id}"
-                    )
+                    # logger.warning(
+                    #     f"Re-Running local feature object detector for frame {id}"
+                    # )
                     # Consider previous pose estimation failed, reuse local feature object detector:
                     (
                         _,
@@ -163,8 +165,11 @@ def inference_core(seq_dir):
                 img_hw=[512, 512],
                 use_pycolmap_ransac=True,
             )
-            logger.debug(f"Pose estimation inliers: {len(inliers_crop)} for frame {id}")
             pred_poses[id] = [pose_pred, inliers_crop]
+
+            for inlier in inliers_crop:
+                detection_counter[tuple(mkpts_3d[inlier])] += 1
+
             mkpts_cache.append(
                 MKPT(
                     K_crop=K_crop,
@@ -178,7 +183,7 @@ def inference_core(seq_dir):
 
             # visualise the detected key points on the 3D pointcloud and the query image.
             # ransac_PnP operates on these sets of key points
-            if cfg.DBG:
+            if cfg.debug_pose_estimation:
                 vis_utils.visualize_2D_3D_keypoints(
                     path=Path(f"temp/{local_feature_obj_detector.query_id}"),
                     data=data,
@@ -314,7 +319,7 @@ def inference_core(seq_dir):
             color="r",
         )
         # save some debug frames and short tracking videos if DBG is True
-        if cfg.DBG and frame_id % 10 == 0:
+        if cfg.debug_tracking and frame_id % 10 == 0:
             tmp_path: Path = Path(f"temp/frame_{frame_id}")
             tmp_path.mkdir(exist_ok=True, parents=True)
             Path(tmp_path / "orig").mkdir(exist_ok=True, parents=True)
@@ -342,14 +347,25 @@ def inference_core(seq_dir):
         "temp/optimized_pose_predictions", f"temp/demo_optimized_pose_{test_dir}.mp4"
     )
     os.system(f"rm -rf temp/optimized_pose_predictions")
-    return
+    return detection_counter
 
 
 def main() -> None:
+    keypoints3d = np.load(f"{cfg.sfm_model_dir}/anno/anno_3d_average.npz")[
+        "keypoints3d"
+    ]  # [m, 3]
+
+    # init detection counter
+    detection_counter = defaultdict(int)
+    for coord in keypoints3d:
+        detection_counter[tuple(coord)] = 0
+
     # loop over all data_dirs specified in the CONFIG class
     for test_dir in cfg.data_dirs:
         seq_dir = osp.join(cfg.data_root, test_dir)
-        inference_core(seq_dir)
+        detection_counter = inference_core(seq_dir, detection_counter)
+
+    data_io.save_ply("detected_pointcloud", detection_counter)
 
     logger.warning("Done")
     return
@@ -359,6 +375,6 @@ if __name__ == "__main__":
     global cfg
     cfg: CONFIG = CONFIG()
     os.system(f"rm -rf temp/*")
-    if cfg.DBG:
+    if cfg.debug_pose_estimation:
         Path("temp/debug").mkdir(exist_ok=True, parents=True)
     main()
