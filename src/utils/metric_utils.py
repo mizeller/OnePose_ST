@@ -198,7 +198,7 @@ def ransac_PnP(
                 inliers = np.array([]).astype(np.bool)
             state = True
 
-            return pose, pose_homo, inliers, state
+            return pose, pose_homo, inliers.squeeze(), state
         except cv2.error:
             state = False
             return np.eye(4)[:3], np.eye(4), np.array([]).astype(np.bool), state
