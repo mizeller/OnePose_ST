@@ -43,7 +43,7 @@ class CONFIG:
         self.obj_name: str = "spot_rgb"  # "spot"
         self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}"
         # NOTE: there must exist a "color_full" sub-directory in ∀ data_dirs
-        self.data_dirs: List[str] = ["spot_yt_cropped-test"]
+        self.data_dirs: List[str] = ["cotrack-test"]
         self.sfm_model_dir: str = (
             f"{self.data_root}/sfm_model/outputs_softmax_loftr_loftr/{self.obj_name}"
         )
@@ -106,7 +106,7 @@ def inference_core(seq_dir, detection_counter: defaultdict) -> defaultdict:
     test_dir: str = seq_dir.split("/")[-1]
     Path("temp/original_pose_predictions").mkdir(exist_ok=True, parents=True)
     # only run pose estimation if cache does not exist
-    if True:  # not Path(f"cache_{test_dir}.pkl").exists():
+    if not Path(f"cache_{test_dir}.pkl").exists():
         logger.warning("running pose estimation...")
         for id in tqdm(range(len(dataset))):
             data = dataset[id]
@@ -213,12 +213,13 @@ def inference_core(seq_dir, detection_counter: defaultdict) -> defaultdict:
         with open(f"cache_{test_dir}.pkl", "wb") as f:
             pickle.dump(cache, f)
 
-    os.system(f"rm -rf temp/original_pose_predictions")
     ####################################################################################################
     ####################################################################################################
 
     logger.warning("optimizing pose estimation...")
     Path("temp/optimized_pose_predictions").mkdir(exist_ok=True, parents=True)
+    Path("temp/comparison").mkdir(exist_ok=True, parents=True)
+
     # load required variables from disk...
     with open(f"cache_{test_dir}.pkl", "rb") as f:
         cache = pickle.load(f)
@@ -245,6 +246,15 @@ def inference_core(seq_dir, detection_counter: defaultdict) -> defaultdict:
                 draw_box=len(pred_poses[frame_id][1]) > 20,
                 save_path=f"temp/optimized_pose_predictions/{frame_id}.jpg",
                 color="r",
+            )
+            vis_utils.save_comparison_image(
+                pose_pred=pred_poses[frame_id][0],
+                pose_pred_optimized=pred_poses[frame_id][0],
+                K=mkpt.K_orig,
+                image_path=query_image_path,
+                box3d=bbox3d,
+                draw_box=len(pred_poses[frame_id][0]) > 20,
+                save_path=f"temp/comparison/{frame_id}.jpg",
             )
             continue
         mkpt.set_images(img_path=query_image_path)
@@ -318,6 +328,17 @@ def inference_core(seq_dir, detection_counter: defaultdict) -> defaultdict:
             save_path=f"temp/optimized_pose_predictions/{frame_id}.jpg",
             color="r",
         )
+
+        vis_utils.save_comparison_image(
+            pose_pred=pred_poses[frame_id][0],
+            pose_pred_optimized=pose_pred_optimized,
+            K=mkpt.K_orig,
+            image_path=query_image_path,
+            box3d=bbox3d,
+            draw_box=len(inliers_optimized) > 20,
+            save_path=f"temp/comparison/{frame_id}.jpg",
+        )
+
         # save some debug frames and short tracking videos if DBG is True
         if cfg.debug_tracking and frame_id % 10 == 0:
             tmp_path: Path = Path(f"temp/frame_{frame_id}")
@@ -346,6 +367,12 @@ def inference_core(seq_dir, detection_counter: defaultdict) -> defaultdict:
     vis_utils.make_video(
         "temp/optimized_pose_predictions", f"temp/demo_optimized_pose_{test_dir}.mp4"
     )
+
+    vis_utils.make_video("temp/comparison", f"temp/demo_comparison_{test_dir}.mp4")
+    
+    # remove frames of demo videos
+    os.system(f"rm -rf temp/original_pose_predictions")
+    os.system(f"rm -rf temp/comparison")
     os.system(f"rm -rf temp/optimized_pose_predictions")
     return detection_counter
 
@@ -364,8 +391,8 @@ def main() -> None:
     for test_dir in cfg.data_dirs:
         seq_dir = osp.join(cfg.data_root, test_dir)
         detection_counter = inference_core(seq_dir, detection_counter)
-
-    data_io.save_ply("detected_pointcloud", detection_counter)
+    if cfg.debug_pose_estimation:
+        data_io.save_ply("detected_pointcloud", detection_counter)
 
     logger.warning("Done")
     return
