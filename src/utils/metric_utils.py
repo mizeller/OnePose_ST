@@ -167,7 +167,7 @@ def ransac_PnP(
             index = np.arange(0, len(pts_3d))
             inliers = index[inliers]
 
-        return pose_homo[:3], pose_homo, inliers, True
+        return pose_homo[:3], pose_homo, inliers
     else:
         dist_coeffs = np.zeros(shape=[8, 1], dtype="float64")
 
@@ -176,7 +176,6 @@ def ransac_PnP(
         K = K.astype(np.float64)
 
         pts_3d *= scale
-        state = None
         try:
             _, rvec, tvec, inliers = cv2.solvePnPRansac(
                 pts_3d,
@@ -196,12 +195,10 @@ def ransac_PnP(
 
             if inliers is None:
                 inliers = np.array([]).astype(np.bool)
-            state = True
 
-            return pose, pose_homo, inliers.squeeze(), state
+            return pose, pose_homo, inliers.squeeze()
         except cv2.error:
-            state = False
-            return np.eye(4)[:3], np.eye(4), np.array([]).astype(np.bool), state
+            return np.eye(4)[:3], np.eye(4), np.array([]).astype(np.bool)
 
 
 @torch.no_grad()
@@ -258,7 +255,7 @@ def compute_query_pose_errors(
         mask = m_bids == bs
 
         mkpts_query_f = mkpts_query[mask]
-        query_pose_pred, query_pose_pred_homo, inliers, state = ransac_PnP(
+        query_pose_pred, query_pose_pred_homo, inliers = ransac_PnP(
             query_K[bs],
             mkpts_query_f,
             mkpts_3d[mask],

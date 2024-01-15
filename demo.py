@@ -138,7 +138,7 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
             match_2D_3D_model(data)
         mkpts_3d = data["mkpts_3d_db"].cpu().numpy()  # N*3
         mkpts_query = data["mkpts_query_f"].cpu().numpy()  # N*2
-        pose_pred, _, inliers, _ = ransac_PnP(
+        pose_pred, _, inliers = ransac_PnP(
             K_crop,
             mkpts_query,
             mkpts_3d,

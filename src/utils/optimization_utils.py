@@ -136,7 +136,7 @@ class MKPT:
         cv2.imwrite(str(save_path), img_cv2)
 
     def debug(self, out_path: Path) -> None:
-        blue, green, red = (255, 0, 0), (0, 255, 0), (0, 0, 255)
+        blue, green, red = (255, 0, 0), (0, 255, 0), (0, 0, 255) # BGR
 
         query_orig_path: Path = out_path / "orig" / "00_query_orig.png"
         query_crop_path: Path = out_path / "crop" / "00_query_crop.png"
