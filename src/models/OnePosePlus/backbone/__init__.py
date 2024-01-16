@@ -46,7 +46,7 @@ def _split_backbone_feats(feats, bs):
 
 
 def _extract_backbone_feats(feats, config):
-    """For backwrad compatibility temporarily."""
+    """For backward compatibility temporarily."""
     if config['type'] == 'ResNetFPN':
         _output_layers = tuple(config['resnetfpn']['output_layers'])
         if len(_output_layers) == 2:

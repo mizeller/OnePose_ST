@@ -138,7 +138,6 @@ def ransac_PnP(
         import pycolmap
 
         assert img_hw is not None and len(img_hw) == 2
-
         pts_2d = list(np.ascontiguousarray(pts_2d.astype(np.float64))[..., None]) # List(2*1)
         pts_3d = list(np.ascontiguousarray(pts_3d.astype(np.float64))[..., None]) # List(3*1)
         K = K.astype(np.float64)
@@ -146,7 +145,7 @@ def ransac_PnP(
         focal_length = K[0, 0]
         cx = K[0, 2]
         cy = K[1, 2]
-        cfg = {
+        camera = {
             "model": "SIMPLE_PINHOLE",
             "width": int(img_hw[1]),
             "height": int(img_hw[0]),
@@ -154,7 +153,16 @@ def ransac_PnP(
         }
 
         ret = pycolmap.absolute_pose_estimation(
-            pts_2d, pts_3d, cfg, max_error_px=float(pnp_reprojection_error)
+        points2D = pts_2d, 
+        points3D = pts_3d,
+        camera = camera, 
+        max_error_px = float(pnp_reprojection_error), 
+        min_inlier_ratio= 0.01, 
+        min_num_trials = 10000, 
+        max_num_trials = 1000000, 
+        confidence = 0.99, 
+        return_covariance = False
+        return_covariance = False
         )
         qvec = ret["qvec"]
         tvec = ret["tvec"]

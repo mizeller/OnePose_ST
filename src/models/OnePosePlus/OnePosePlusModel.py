@@ -118,7 +118,6 @@ class OnePosePlus_model(nn.Module):
             }
         )
 
-        # [torch.Size([1, 256, 64, 64]), torch.Size([1, 128, 256, 256])]
         query_feature_map = self.backbone(data["query_image"])
 
         query_feat_b_c, query_feat_f = _extract_backbone_feats(

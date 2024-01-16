@@ -25,12 +25,4 @@ def normalize_3d_keypoints(kpts):
     scaling = size.max(1, keepdim=True).values * 0.6
     kpts_rescaled = (kpts - center[:, None, :]) / scaling[:, None, :]
 
-    # DBG: visualize normalized keypoints
-    # import open3d as o3d
-    # pcd = o3d.geometry.PointCloud()
-    # keypoints3d_cpu = kpts_rescaled.detach().clone().cpu().numpy().reshape(-1,3)
-    # pcd.points = o3d.utility.Vector3dVector(keypoints3d_cpu)
-    # path: str = f"temp/3d_keypoints_normalized.ply"
-    # o3d.io.write_point_cloud(path, pcd)
-
     return kpts_rescaled
