@@ -153,17 +153,17 @@ def ransac_PnP(
         }
 
         ret = pycolmap.absolute_pose_estimation(
-        points2D = pts_2d, 
-        points3D = pts_3d,
-        camera = camera, 
-        max_error_px = float(pnp_reprojection_error), 
-        min_inlier_ratio= 0.01, 
-        min_num_trials = 10000, 
-        max_num_trials = 1000000, 
-        confidence = 0.99, 
-        return_covariance = False
-        return_covariance = False
+            points2D = pts_2d, 
+            points3D = pts_3d,
+            camera = camera, 
+            max_error_px = float(pnp_reprojection_error), 
+            min_inlier_ratio= 0.01, 
+            min_num_trials = 10000, 
+            max_num_trials = 1000000, 
+            confidence = 0.99, 
+            return_covariance = False,
         )
+
         qvec = ret["qvec"]
         tvec = ret["tvec"]
         pose_homo = convert_pose2T([qvec2rotmat(qvec), tvec])

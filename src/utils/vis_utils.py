@@ -109,7 +109,14 @@ def add_pointcloud_to_vis3d(pointcloud_pth, dump_dir, save_name):
 
 
 def save_demo_image(
-    pose_pred, K, image_path, box3d, draw_box=True, save_path=None, color="b"
+    pose_pred,
+    K,
+    image_path,
+    box3d,
+    draw_box=True,
+    save_path=None,
+    color="b",
+    comment: str = "",
 ):
     """
     Project 3D bbox by predicted pose and visualize
@@ -123,14 +130,27 @@ def save_demo_image(
         reproj_box_2d = reproj(K, pose_pred, box3d)
         draw_3d_box(image_full, reproj_box_2d, color=color, linewidth=5)
 
+    if comment:
+        image_full = cv2.putText(
+            image_full,
+            comment,
+            (10, image_full.shape[0] - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (0, 255, 0),
+            2,
+            cv2.LINE_AA,
+        )
+
     if save_path is not None:
         Path(save_path).parent.mkdir(exist_ok=True, parents=True)
 
         cv2.imwrite(save_path, image_full)
     return image_full
 
+
 def save_comparison_image(
-    pose_pred, pose_pred_optimized, K, image_path, box3d, draw_box=True, save_path=None 
+    pose_pred, pose_pred_optimized, K, image_path, box3d, draw_box=True, save_path=None
 ):
     """
     Save image w/ the inital & optimized pose predictions.
@@ -143,11 +163,10 @@ def save_comparison_image(
     if draw_box:
         # original pose prediction
         reproj_box_2d = reproj(K, pose_pred, box3d)
-        draw_3d_box(image_full, reproj_box_2d, color='b', linewidth=2)
+        draw_3d_box(image_full, reproj_box_2d, color="b", linewidth=2)
         # optimised
         reproj_box_2d = reproj(K, pose_pred_optimized, box3d)
-        draw_3d_box(image_full, reproj_box_2d, color='r', linewidth=2)
-
+        draw_3d_box(image_full, reproj_box_2d, color="r", linewidth=2)
 
     if save_path is not None:
         Path(save_path).parent.mkdir(exist_ok=True, parents=True)
@@ -171,7 +190,7 @@ def make_video(image_path, output_video_path):
         video.write(image)
     video.release()
 
-    
+
 def visualize_2D_3D_keypoints(
     path: Path, data, inp_crop, inliers, mkpts_3d, mkpts_query
 ):

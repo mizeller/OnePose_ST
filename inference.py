@@ -9,7 +9,7 @@ from pathlib import Path
 import pickle
 import numpy as np
 import torch
-from collections import defaultdict
+import cv2
 
 from src.utils import data_utils, vis_utils, metric_utils, data_io
 from src.utils.optimization_utils import MKPT
@@ -26,7 +26,7 @@ from submodules.CoTracker.cotracker.utils.visualizer import Visualizer
 
 
 ####################################################################################################
-######################## TODO - MAKE YOUR MODIFICATIONS HERE M######################################
+# CONFIGS & TEMPORARY HELPER METHODS
 ####################################################################################################
 class CONFIG:
     class DATAMODULE:
@@ -49,14 +49,17 @@ class CONFIG:
         )
         self.datamodule = CONFIG.DATAMODULE()
         self.model: dict = self._get_model()
-        self.debug_pose_estimation: bool = False
 
         # pose estimation optimization meta parameters
         self.temp_thresh: int = 5  # time horizon for tracking & initialization phase
         self.inliers_only: bool = (
             True  # use only the inliers for tracking OR all previous key points
         )
-        self.debug_tracking: bool = True
+
+        # debug flags
+        self.debug_pose_estimation: bool = False
+        self.debug_tracking: bool = False
+        self.debug_triangulation: bool = False
 
     def _get_model(self) -> dict:
         with open("configs/experiment/inference_demo.yaml", "r") as f:
@@ -64,16 +67,50 @@ class CONFIG:
         return onepose_config["model"]
 
 
-####################################################################################################
-##########################TODO: refactor helper methods later ######################################
-####################################################################################################
+def plot_keypoints_on_frames(video, tracks, visibilities):
+    """
+    video            torch.Tensor       [B, F, C, H, W]     sliced video w/ F frames
+    tracks           torch.Tensor       [B, F, N, 2]        x-y coordinates of N tracked keypoints over F frames
+    visibilities     torch.Tensor       [B, F, N]           visibility of N tracked keypoints over F frames
+    pred_poses       dict               {F: pose}           predicted poses for F frames
+    """
+
+    if not Path("temp/debug").exists():
+        os.makedirs("temp/debug", exist_ok=True)
+
+        # Normalize the video frames to the range [0, 1] for plotting
+        video = video - video.min()
+        video = video / video.max()
+
+        # re-map the keys of pred_poses to match the frame id of the sliced video
+
+        # Iterate over each frame and its corresponding keypoints
+        for i, (frame, keypoints, visibility) in enumerate(
+            zip(video[0], tracks[0], visibilities[0])
+        ):
+            # NOTE: only try to triangulate 2 points
+            # Convert the frame and keypoints to numpy arrays
+            frame = frame.permute(1, 2, 0).cpu().numpy()
+            keypoints = keypoints.cpu().numpy()
+            visibility = visibility.cpu().numpy()
+
+            # Scale the frame to the range [0, 255]
+            frame = (frame * 255).astype(np.uint8)
+
+            # Draw the keypoints on the frame
+            for x, y in keypoints[visibility]:
+                cv2.circle(
+                    frame, (int(x), int(y)), radius=2, color=(0, 0, 255), thickness=-1
+                )
+
+            # Save the frame
+            cv2.imwrite(f"temp/debug/frame_{i}.png", frame)
 
 
 ####################################################################################################
-####################################################################################################
 
 
-def inference_core(seq_dir, detection_counter: defaultdict) -> defaultdict:
+def inference_core(seq_dir):
     """Inference core function for OnePosePlus."""
     logger.warning(f"Running inference on {seq_dir}")
     img_list, paths = demo.get_default_paths(cfg.data_root, seq_dir, cfg.sfm_model_dir)
@@ -104,9 +141,13 @@ def inference_core(seq_dir, detection_counter: defaultdict) -> defaultdict:
     pred_poses = {}  # {id:[pred_pose, inliers]}
     mkpts_cache = []
     test_dir: str = seq_dir.split("/")[-1]
-    Path("temp/original_pose_predictions").mkdir(exist_ok=True, parents=True)
-    # only run pose estimation if cache does not exist
-    if not Path(f"cache_{test_dir}.pkl").exists():
+    pkl_file: str = f"cache_{test_dir}.pkl"
+
+    ####################################################################################################
+    # POSE ESTIMATION
+    ####################################################################################################
+    if not Path(pkl_file).exists():
+        Path("temp/original_pose_predictions").mkdir(exist_ok=True, parents=True)
         logger.warning("running pose estimation...")
         for id in tqdm(range(len(dataset))):
             data = dataset[id]
@@ -156,7 +197,7 @@ def inference_core(seq_dir, detection_counter: defaultdict) -> defaultdict:
                 match_2D_3D_model(data)
             mkpts_3d = data["mkpts_3d_db"].cpu().numpy()  # N*3
             mkpts_crop = data["mkpts_query_f"].cpu().numpy()  # N*2
-            pose_pred, _, inliers_crop, _ = metric_utils.ransac_PnP(
+            pose_pred, _, inliers_crop = metric_utils.ransac_PnP(
                 K_crop,
                 mkpts_crop,
                 mkpts_3d,
@@ -166,9 +207,6 @@ def inference_core(seq_dir, detection_counter: defaultdict) -> defaultdict:
                 use_pycolmap_ransac=True,
             )
             pred_poses[id] = [pose_pred, inliers_crop]
-
-            for inlier in inliers_crop:
-                detection_counter[tuple(mkpts_3d[inlier])] += 1
 
             mkpts_cache.append(
                 MKPT(
@@ -201,28 +239,31 @@ def inference_core(seq_dir, detection_counter: defaultdict) -> defaultdict:
                 box3d=bbox3d,
                 draw_box=len(inliers_crop) > 20,
                 save_path=f"temp/original_pose_predictions/{id}.jpg",
+                comment="initial pose estimation"
             )
 
         # Output video to visualize estimated poses:
         vis_utils.make_video(
-            "temp/original_pose_predictions", f"temp/demo_pose_{test_dir}.mp4"
+            "temp/original_pose_predictions",
+            f"temp/00_{test_dir}.mp4",
         )
 
         # store variables to disk to debug cotracker separately
         cache = {"mkpts_cache": mkpts_cache, "pred_poses": pred_poses}
-        with open(f"cache_{test_dir}.pkl", "wb") as f:
+        with open(pkl_file, "wb") as f:
             pickle.dump(cache, f)
 
     ####################################################################################################
+    # POSE ESTIMATION OPTIMIZATION
     ####################################################################################################
-
     logger.warning("optimizing pose estimation...")
     Path("temp/optimized_pose_predictions").mkdir(exist_ok=True, parents=True)
     Path("temp/comparison").mkdir(exist_ok=True, parents=True)
 
     # load required variables from disk...
-    with open(f"cache_{test_dir}.pkl", "rb") as f:
+    with open(pkl_file, "rb") as f:
         cache = pickle.load(f)
+
     mkpts_cache = cache["mkpts_cache"]
     pred_poses = cache["pred_poses"]
     tracker: CoTrackerPredictor = CoTrackerPredictor(
@@ -232,7 +273,7 @@ def inference_core(seq_dir, detection_counter: defaultdict) -> defaultdict:
     video = data_io.read_video_from_path(Path(f"{seq_dir}/color_full"))
     video = torch.from_numpy(video).permute(0, 3, 1, 2)[None].float()
     queries: torch.Tensor = torch.empty(0, 3).cuda()
-
+    updated_model: np.ndarray = np.empty((0, 3))
     for frame_id in tqdm(range(len(mkpts_cache))):
         mkpt: MKPT = mkpts_cache[frame_id]
         query_image_path = dataset[frame_id]["query_image_path"]
@@ -246,6 +287,7 @@ def inference_core(seq_dir, detection_counter: defaultdict) -> defaultdict:
                 draw_box=len(pred_poses[frame_id][1]) > 20,
                 save_path=f"temp/optimized_pose_predictions/{frame_id}.jpg",
                 color="r",
+                comment="initialization frame"
             )
             vis_utils.save_comparison_image(
                 pose_pred=pred_poses[frame_id][0],
@@ -297,6 +339,43 @@ def inference_core(seq_dir, detection_counter: defaultdict) -> defaultdict:
         # extract the tracked key points from the last frame
         mkpt.set_new_mkpts(_tracks)
 
+        if cfg.debug_triangulation:
+            # at this point, given the coordinates of the inliers in several frames
+            # and the associated camera-image transformation, triangulate the associated
+            # 3D point and add it to the model!
+            _pred_poses = [
+                pred_poses[j][0]
+                for j in range(frame_id - cfg.temp_thresh, frame_id + 1)
+            ]
+
+            n_pts: int = 50 if _tracks.shape[2] >= 50 else _tracks.shape[2]
+
+            if bool(n_pts):
+                _tracks = _tracks[:, :, :n_pts, :]
+                _visibility = _visibility[:, :, :n_pts]
+
+            kpts_3D_homo = cv2.triangulatePoints(
+                _pred_poses[0],
+                _pred_poses[-1],
+                _tracks[0, 0, :, :].cpu().numpy().T,
+                _tracks[0, -1, :, :].cpu().numpy().T,
+            ).T
+            kpts_3D = kpts_3D_homo[:, :3] / kpts_3D_homo[:, 3:]
+            updated_model = np.append(updated_model, kpts_3D, axis=0)
+            plot_keypoints_on_frames(sliced_video, _tracks, _visibility)
+            vis_2 = Visualizer(
+                save_dir=f"temp/debug",
+                linewidth=1,
+                mode="cool",
+                tracks_leave_trace=-1,
+            )
+            vis_2.visualize(
+                video=sliced_video[:, :, [2, 1, 0], :, :],  # BGR -> RGB
+                tracks=_tracks,
+                visibility=_visibility,
+                filename=f"tracked_seq",
+            )
+
         # inject the tracked key points before the ransac PnP step
         mkpts_2d_injected = np.concatenate(
             (mkpt.mkpts_crop, mkpt.mkpts_crop_tracked), axis=0
@@ -304,7 +383,7 @@ def inference_core(seq_dir, detection_counter: defaultdict) -> defaultdict:
         mkpts_3d_injected = np.concatenate((mkpt.mkpts_3d, mkpts_3d_previous), axis=0)
 
         # now, re-run ransac_PnP w/ additional key-points
-        pose_pred_optimized, _, inliers_optimized, _ = metric_utils.ransac_PnP(
+        pose_pred_optimized, _, inliers_optimized = metric_utils.ransac_PnP(
             mkpt.K_crop,
             mkpts_2d_injected,
             mkpts_3d_injected,
@@ -316,17 +395,24 @@ def inference_core(seq_dir, detection_counter: defaultdict) -> defaultdict:
 
         mkpt.set_new_inliers(inliers_optimized)
 
-        # TODO: some numerical analysis if the optimized pose is better than before..
+        mkpt._save_img_w_mkpts(
+            img_path=query_image_path,
+            mkpts=mkpt.inliers_orig_optimised,
+            color=(0, 255, 0),
+            save_path=f"temp/optimized_pose_predictions/{frame_id}.jpg",
+            r=2,
+        )
 
         # Visualize:
         vis_utils.save_demo_image(
             pose_pred_optimized,
             mkpt.K_orig,
-            image_path=query_image_path,
+            image_path=f"temp/optimized_pose_predictions/{frame_id}.jpg",
             box3d=bbox3d,
             draw_box=len(inliers_optimized) > 20,
             save_path=f"temp/optimized_pose_predictions/{frame_id}.jpg",
             color="r",
+            comment="optimized pose estimation"
         )
 
         vis_utils.save_comparison_image(
@@ -365,34 +451,22 @@ def inference_core(seq_dir, detection_counter: defaultdict) -> defaultdict:
         queries = torch.empty(0, 3).cuda()
 
     vis_utils.make_video(
-        "temp/optimized_pose_predictions", f"temp/demo_optimized_pose_{test_dir}.mp4"
+        "temp/optimized_pose_predictions",
+        f"temp/01_{test_dir}.mp4",
     )
 
-    vis_utils.make_video("temp/comparison", f"temp/demo_comparison_{test_dir}.mp4")
-    
+    vis_utils.make_video("temp/comparison", f"temp/02_{test_dir}.mp4")
     # remove frames of demo videos
     os.system(f"rm -rf temp/original_pose_predictions")
     os.system(f"rm -rf temp/comparison")
     os.system(f"rm -rf temp/optimized_pose_predictions")
-    return detection_counter
 
 
 def main() -> None:
-    keypoints3d = np.load(f"{cfg.sfm_model_dir}/anno/anno_3d_average.npz")[
-        "keypoints3d"
-    ]  # [m, 3]
-
-    # init detection counter
-    detection_counter = defaultdict(int)
-    for coord in keypoints3d:
-        detection_counter[tuple(coord)] = 0
-
     # loop over all data_dirs specified in the CONFIG class
     for test_dir in cfg.data_dirs:
         seq_dir = osp.join(cfg.data_root, test_dir)
-        detection_counter = inference_core(seq_dir, detection_counter)
-    if cfg.debug_pose_estimation:
-        data_io.save_ply("detected_pointcloud", detection_counter)
+        inference_core(seq_dir)
 
     logger.warning("Done")
     return
