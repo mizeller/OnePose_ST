@@ -3,7 +3,6 @@ import os.path as osp
 from tqdm import tqdm
 from loguru import logger
 import yaml
-import demo
 import os
 from pathlib import Path
 import pickle
@@ -11,7 +10,7 @@ import numpy as np
 import torch
 import cv2
 
-from src.utils import data_utils, vis_utils, metric_utils, data_io
+from src.utils import data_utils, vis_utils, metric_utils, data_io, path_utils
 from src.utils.optimization_utils import MKPT
 from src.datasets.OnePosePlus_inference_dataset import OnePosePlusInferenceDataset
 from src.inference import inference_OnePosePlus
@@ -43,7 +42,7 @@ class CONFIG:
         self.obj_name: str = "spot_rgb"  # "spot"
         self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}"
         # NOTE: there must exist a "color_full" sub-directory in ∀ data_dirs
-        self.data_dirs: List[str] = ["cotrack-test"]
+        self.data_dirs: List[str] = ["asus_long", "asus_short", "hololens-00", "hololens-01", "hololens-02", "yt_arm_long", "yt_arm_short", "yt_no_arm"]
         self.sfm_model_dir: str = (
             f"{self.data_root}/sfm_model/outputs_softmax_loftr_loftr/{self.obj_name}"
         )
@@ -113,7 +112,7 @@ def plot_keypoints_on_frames(video, tracks, visibilities):
 def inference_core(seq_dir):
     """Inference core function for OnePosePlus."""
     logger.warning(f"Running inference on {seq_dir}")
-    img_list, paths = demo.get_default_paths(cfg.data_root, seq_dir, cfg.sfm_model_dir)
+    img_list, paths = path_utils.get_default_paths(cfg.data_root, seq_dir, cfg.sfm_model_dir)
     dataset = OnePosePlusInferenceDataset(
         paths["sfm_dir"],
         img_list,
@@ -127,9 +126,6 @@ def inference_core(seq_dir):
     )
     local_feature_obj_detector: LocalFeatureObjectDetector = LocalFeatureObjectDetector(
         sfm_ws_dir=paths["sfm_ws_dir"],
-        output_results=True,
-        detect_save_dir=paths["vis_detector_dir"],
-        K_crop_save_dir=paths["vis_detector_dir"],
         DBG=cfg.debug_pose_estimation,
     )
     match_2D_3D_model: OnePosePlus_model = inference_OnePosePlus.build_model(
@@ -140,8 +136,8 @@ def inference_core(seq_dir):
     bbox3d = np.loadtxt(paths["bbox3d_path"])
     pred_poses = {}  # {id:[pred_pose, inliers]}
     mkpts_cache = []
-    test_dir: str = seq_dir.split("/")[-1]
-    pkl_file: str = f"cache_{test_dir}.pkl"
+    test_id: str = seq_dir.split("/")[-1]
+    pkl_file: str = f"{seq_dir}/pose_estimation_cache.pkl"
 
     ####################################################################################################
     # POSE ESTIMATION
@@ -245,7 +241,7 @@ def inference_core(seq_dir):
         # Output video to visualize estimated poses:
         vis_utils.make_video(
             "temp/original_pose_predictions",
-            f"temp/00_{test_dir}.mp4",
+            f"temp/00_{test_id}.mp4",
         )
 
         # store variables to disk to debug cotracker separately
@@ -295,7 +291,7 @@ def inference_core(seq_dir):
                 K=mkpt.K_orig,
                 image_path=query_image_path,
                 box3d=bbox3d,
-                draw_box=len(pred_poses[frame_id][0]) > 20,
+                draw_box=len(pred_poses[frame_id][1]) > 20,
                 save_path=f"temp/comparison/{frame_id}.jpg",
             )
             continue
@@ -412,7 +408,7 @@ def inference_core(seq_dir):
             draw_box=len(inliers_optimized) > 20,
             save_path=f"temp/optimized_pose_predictions/{frame_id}.jpg",
             color="r",
-            comment="optimized pose estimation"
+            comment=f"optimized pose estimation\t  #inliers: {len(inliers_optimized)} (vs. {len(pred_poses[frame_id][1])})"
         )
 
         vis_utils.save_comparison_image(
@@ -452,10 +448,10 @@ def inference_core(seq_dir):
 
     vis_utils.make_video(
         "temp/optimized_pose_predictions",
-        f"temp/01_{test_dir}.mp4",
+        f"temp/01_{test_id}.mp4",
     )
 
-    vis_utils.make_video("temp/comparison", f"temp/02_{test_dir}.mp4")
+    vis_utils.make_video("temp/comparison", f"temp/02_{test_id}.mp4")
     # remove frames of demo videos
     os.system(f"rm -rf temp/original_pose_predictions")
     os.system(f"rm -rf temp/comparison")

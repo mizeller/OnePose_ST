@@ -136,9 +136,9 @@ def save_demo_image(
             comment,
             (10, image_full.shape[0] - 10),
             cv2.FONT_HERSHEY_SIMPLEX,
-            1,
+            0.5,
             (0, 255, 0),
-            2,
+            1,
             cv2.LINE_AA,
         )
 
