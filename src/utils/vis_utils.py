@@ -3,10 +3,10 @@ import numpy as np
 import torch
 from pathlib import Path
 import natsort
-import os
 from loguru import logger
 from wis3d import Wis3D as Vis3D
 import open3d as o3d
+import imageio
 
 
 def reproj(K, pose, pts_3d):
@@ -175,20 +175,19 @@ def save_comparison_image(
     return image_full
 
 
-def make_video(image_path, output_video_path):
+def make_video(image_path, output_video_path, fps: int = 30):
     # Generate video:
-    images = natsort.natsorted(os.listdir(image_path))
+    images = natsort.natsorted(Path(image_path).iterdir())
     Path(output_video_path).parent.mkdir(parents=True, exist_ok=True)
-    H, W, C = cv2.imread(str(Path(image_path) / images[0])).shape
     if Path(output_video_path).exists():
         Path(output_video_path).unlink()
 
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    video = cv2.VideoWriter(output_video_path, fourcc, 10, (W, H))
-    for id, image_name in enumerate(images):
-        image = cv2.imread(str(Path(image_path) / image_name))
-        video.write(image)
-    video.release()
+    video = []
+    for _, image_name in enumerate(images):
+        image = imageio.imread(str(image_name))
+        video.append(image)
+    video_np = np.array(video)
+    imageio.mimwrite(output_video_path, video_np, fps=fps)
 
 
 def visualize_2D_3D_keypoints(
