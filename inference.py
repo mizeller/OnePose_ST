@@ -35,14 +35,23 @@ class CONFIG:
         pad3D: bool = (
             False  # if True: pad 3D point cloud to shape3d_val else: use all points
         )
-        shape3d_val: int = 7000  # #points in 3D point cloud; only used if pad3D is True
+        shape3d_val: int = 7000  # number of points in 3D point cloud; only used if pad3D is True
 
     def __init__(self):
         # TODO: adapt obj_name and data_dirs to your needs
         self.obj_name: str = "spot_rgb"  # "spot"
         self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}"
         # NOTE: there must exist a "color_full" sub-directory in ∀ data_dirs
-        self.data_dirs: List[str] = ["asus_long", "asus_short", "hololens-00", "hololens-01", "hololens-02", "yt_arm_long", "yt_arm_short", "yt_no_arm"]
+        self.data_dirs: List[str] = [
+            "asus_short",
+            # "asus_long",
+            # "hololens-00",
+            # "hololens-01",
+            # "hololens-02",
+            # "yt_arm_long",
+            # "yt_arm_short",
+            # "yt_no_arm",
+        ]
         self.sfm_model_dir: str = (
             f"{self.data_root}/sfm_model/outputs_softmax_loftr_loftr/{self.obj_name}"
         )
@@ -59,7 +68,9 @@ class CONFIG:
         self.debug_pose_estimation: bool = False
         self.debug_tracking: bool = False
         self.debug_triangulation: bool = False
-
+        self.use_cache: bool = False # skip pose estimation if cache exists (for debugging)
+        
+        
     def _get_model(self) -> dict:
         with open("configs/experiment/inference_demo.yaml", "r") as f:
             onepose_config = yaml.load(f, Loader=yaml.FullLoader)
@@ -112,7 +123,9 @@ def plot_keypoints_on_frames(video, tracks, visibilities):
 def inference_core(seq_dir):
     """Inference core function for OnePosePlus."""
     logger.warning(f"Running inference on {seq_dir}")
-    img_list, paths = path_utils.get_default_paths(cfg.data_root, seq_dir, cfg.sfm_model_dir)
+    img_list, paths = path_utils.get_default_paths(
+        cfg.data_root, seq_dir, cfg.sfm_model_dir
+    )
     dataset = OnePosePlusInferenceDataset(
         paths["sfm_dir"],
         img_list,
@@ -133,25 +146,24 @@ def inference_core(seq_dir):
     )
     match_2D_3D_model.cuda()
     K, _ = data_utils.get_K(intrin_file=paths["intrin_full_path"])
+    if K is None:
+        K = data_utils.infer_K(img_folder_path=Path(paths["color_dir"]))
     bbox3d = np.loadtxt(paths["bbox3d_path"])
     pred_poses = {}  # {id:[pred_pose, inliers]}
     mkpts_cache = []
     test_id: str = seq_dir.split("/")[-1]
     pkl_file: str = f"{seq_dir}/pose_estimation_cache.pkl"
-
     ####################################################################################################
     # POSE ESTIMATION
+    skip_pose_estimation: bool = cfg.use_cache and Path(pkl_file).exists()
     ####################################################################################################
-    if not Path(pkl_file).exists():
+    if not skip_pose_estimation:
         Path("temp/original_pose_predictions").mkdir(exist_ok=True, parents=True)
         logger.warning("running pose estimation...")
         for id in tqdm(range(len(dataset))):
             data = dataset[id]
             query_image = data["query_image"]
             query_image_path = data["query_image_path"]
-
-            if K is None:
-                K = data_utils.infer_K(img_path=query_image_path)
 
             # Detect object:
             if id == 0:
@@ -235,7 +247,7 @@ def inference_core(seq_dir):
                 box3d=bbox3d,
                 draw_box=len(inliers_crop) > 20,
                 save_path=f"temp/original_pose_predictions/{id}.jpg",
-                comment="initial pose estimation"
+                comment="initial pose estimation",
             )
 
         # Output video to visualize estimated poses:
@@ -257,8 +269,9 @@ def inference_core(seq_dir):
     Path("temp/comparison").mkdir(exist_ok=True, parents=True)
 
     # load required variables from disk...
-    with open(pkl_file, "rb") as f:
-        cache = pickle.load(f)
+    if cfg.use_cache and Path(pkl_file).exists():
+        with open(pkl_file, "rb") as f:
+            cache = pickle.load(f)
 
     mkpts_cache = cache["mkpts_cache"]
     pred_poses = cache["pred_poses"]
@@ -283,7 +296,7 @@ def inference_core(seq_dir):
                 draw_box=len(pred_poses[frame_id][1]) > 20,
                 save_path=f"temp/optimized_pose_predictions/{frame_id}.jpg",
                 color="r",
-                comment="initialization frame"
+                comment="initialization frame",
             )
             vis_utils.save_comparison_image(
                 pose_pred=pred_poses[frame_id][0],
@@ -408,7 +421,7 @@ def inference_core(seq_dir):
             draw_box=len(inliers_optimized) > 20,
             save_path=f"temp/optimized_pose_predictions/{frame_id}.jpg",
             color="r",
-            comment=f"optimized pose estimation\t  #inliers: {len(inliers_optimized)} (vs. {len(pred_poses[frame_id][1])})"
+            comment=f"optimized pose estimation\t  #inliers: {len(inliers_optimized)} (vs. {len(pred_poses[frame_id][1])})",
         )
 
         vis_utils.save_comparison_image(

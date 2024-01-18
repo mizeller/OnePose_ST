@@ -6,6 +6,13 @@ import math
 from loguru import logger
 from .calib import demo
 
+# calibration_model: demo.DeepCalibration = torch.hub.load(
+#     "AlanSavio25/DeepSingleImageCalibration",
+#     "DeepCalibration",
+#     force_reload=False,
+# )
+calibration_model = demo.DeepCalibration()
+
 
 def get_3rd_point(a, b):
     direct = a - b
@@ -283,25 +290,8 @@ def get_K_crop_resize(box, K_orig, resize_shape):
     return K_crop, K_crop_homo
 
 
-def infer_K(img_path: str):
-    """
-    In case the camera intrinsics matrix is not defined, infer it from the image.
-    Using: https://github.com/AlanSavio25/DeepSingleImageCalibration/
-
-    NOTE: currently K is infered for each frame of a video, which is kind of inefficient.
-          the underlying assumption (after watching some youtube videos) is that in one yt video different cameras can be used.
-          thus, K is infered for each frame. performance can be optimised for at a later stage..
-    """
-    logger.info(f"Computing K for {img_path}")
-
-    # model: demo.DeepCalibration = torch.hub.load(
-    #     "AlanSavio25/DeepSingleImageCalibration",
-    #     "DeepCalibration",
-    #     force_reload=False,
-    # )
-    
-    model = demo.DeepCalibration()
-    ret = model.calibrate_from_path(image_path=img_path)
+def _get_K(img_path: Path):
+    ret = calibration_model.calibrate_from_path(image_path=img_path)
     focal_length_pixels = ret["focal_length_pixels"]
     height = ret["height"]
     width = ret["width"]
@@ -317,11 +307,29 @@ def infer_K(img_path: str):
 
     # Create the camera intrinsic matrix
     K = np.array([[focal_length_pixels, 0, c_x], [0, focal_length_y, c_y], [0, 0, 1]])
+    return K
 
-    # K_homo = np.array(
-    #     [[focal_length_pixels, 0, c_x, 0], [0, focal_length_y, c_y, 0], [0, 0, 1, 0]]
-    # )
-    return K  # , K_homo
+
+def infer_K(img_path: Path = None, img_folder_path: Path = None):
+    """
+    In case the camera intrinsics matrix is not defined, infer it from the image(s).
+    Using: https://github.com/AlanSavio25/DeepSingleImageCalibration/
+    
+    Either provide the path to a single image or a 'color_full' directory. 
+    """
+    logger.info(f"Computing K for {img_path}")
+
+    if img_folder_path:
+        # average the K matrix for all frames in the clip
+        K_matrices = []
+        for _img_path in img_folder_path.iterdir():
+            K_matrices.append(_get_K(_img_path))
+        K_matrices = np.array(K_matrices)
+        K = np.mean(K_matrices, axis=0)
+    else:
+        assert img_path is not None, "Either img_path or img_folder_path must be provided"
+        K = _get_K(img_path)
+    return K
 
 
 def get_K(intrin_file):

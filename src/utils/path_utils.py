@@ -106,5 +106,6 @@ def get_default_paths(data_root, data_dir, sfm_model_dir):
         "intrin_full_dir": intrin_full_dir,
         "det_box_vis_video_path": det_box_vis_video_path,
         "demo_video_path": demo_video_path,
+        "color_dir": color_dir,
     }
     return img_lists, paths
