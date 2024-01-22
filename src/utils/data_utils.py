@@ -317,8 +317,6 @@ def infer_K(img_path: Path = None, img_folder_path: Path = None):
     
     Either provide the path to a single image or a 'color_full' directory. 
     """
-    logger.info(f"Computing K for {img_path}")
-
     if img_folder_path:
         # average the K matrix for all frames in the clip
         K_matrices = []
