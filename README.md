@@ -1,5 +1,10 @@
 # Spot Pose Estimation
 
+Here is a simple footnote[^1]. With some additional text after it.
+
+[^1]: My reference.
+
+
 Training and testing custom pose estimation pipelines can be a tedious and time-consuming process when initially being confronted by all the various existing algorithms out there.
 
 This repository is building on previous work [insert link to synthetic data pipeline] & contains both the instructions on how a minimal training set of synthetic data can be created for a custom object and subsequently used for training a custom pose estimation model using an optimized version of OnePose++.
