@@ -58,89 +58,30 @@ def get_arkit_default_path(data_dir):
     return paths
 
 
-def get_test_default_path(data_dir):
-    video_file = osp.join(data_dir, "Frames.m4v")
-
-    box_file = osp.join(data_dir, "Box.txt")
-    if osp.exists(box_file):
-        os.remove(box_file)
-
-    color_full_dir = osp.join(data_dir, "color_full")
-    Path(color_full_dir).mkdir(parents=True, exist_ok=True)
-
-    pose_file = osp.join(data_dir, "ARposes.txt")
-    if osp.exists(pose_file):
-        os.remove(pose_file)
-
-    orig_intrin_file = osp.join(data_dir, "Frames.txt")
-    final_intrin_file = osp.join(data_dir, "intrinsics.txt")
-
-    paths = {
-        "video_file": video_file,
-        "color_full_dir": color_full_dir,
-        "orig_intrin_file": orig_intrin_file,
-        "final_intrin_file": final_intrin_file,
-    }
-
-    return paths
-
-
 def get_bbox3d(box_path):
     assert Path(box_path).exists()
     with open(box_path, "r") as f:
         lines = f.readlines()
     box_data = [float(e) for e in lines[1].strip().split(",")]
-
-    if DEMO:
-        ex, ey, ez = box_data[3:6]
-        bbox_3d = (
-            np.array(
-                [
-                    [-ex, -ey, -ez],
-                    [ex, -ey, -ez],
-                    [ex, -ey, ez],
-                    [-ex, -ey, ez],
-                    [-ex, ey, -ez],
-                    [ex, ey, -ez],
-                    [ex, ey, ez],
-                    [-ex, ey, ez],
-                ]
-            )
-            * 0.5
-        )
-    else:
-        px, py, pz = box_data[:3]
-        ex, ey, ez = box_data[3:6]
-        ex /= 2
-        ey /= 2
-        ez /= 2
-        bbox_3d = np.array(
-            [
-                [px - ex, py - ey, pz - ez],  # back, left, down
-                [px + ex, py - ey, pz - ez],  # front, left, down
-                [px + ex, py - ey, pz + ez],  # front, left, up
-                [px - ex, py - ey, pz + ez],  # back, left, up
-                [px - ex, py + ey, pz - ez],  # back, right, down
-                [px + ex, py + ey, pz - ez],  # front, right, down
-                [px + ex, py + ey, pz + ez],  # front, right, up
-                [px - ex, py + ey, pz + ez],  # back, right, up
-            ]
-        )
-
+    px, py, pz = box_data[:3]
+    ex, ey, ez = box_data[3:6]
+    ex /= 2
+    ey /= 2
+    ez /= 2
+    bbox_3d = np.array(
+        [
+            [px - ex, py - ey, pz - ez],  # back, left, down
+            [px + ex, py - ey, pz - ez],  # front, left, down
+            [px + ex, py - ey, pz + ez],  # front, left, up
+            [px - ex, py - ey, pz + ez],  # back, left, up
+            [px - ex, py + ey, pz - ez],  # back, right, down
+            [px + ex, py + ey, pz - ez],  # front, right, down
+            [px + ex, py + ey, pz + ez],  # front, right, up
+            [px - ex, py + ey, pz + ez],  # back, right, up
+        ]
+    )
     bbox_3d_homo = np.concatenate([bbox_3d, np.ones((8, 1))], axis=1)
     return bbox_3d, bbox_3d_homo
-
-
-def parse_box(box_path):
-    # only used for demo data!
-    with open(box_path, "r") as f:
-        lines = f.readlines()
-    data = [float(e) for e in lines[1].strip().split(",")]
-    position = data[:3]
-    quaternion = data[6:]
-    rot_mat = quaternions.quat2mat(quaternion)
-    T_ow = affines.compose(position, rot_mat, np.ones(3))
-    return T_ow
 
 
 def reproj(K_homo, pose, points3d_homo):
@@ -249,34 +190,11 @@ def data_process_anno(data_dir, downsample_rate=1, hw=512):
                 ]  # coords from one line in the ARPoses.txt
 
                 position = data[1:4]  # [tx, ty, tz] // data[4:] = [qw, qx, qy qz]
-
-                if DEMO:
-                    quaternion = data[4:]
-                    rot_mat = quaternions.quat2mat(quaternion)
-                    rot_mat = rot_mat @ np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
-
-                    T_ow = parse_box(paths["box_path"])
-                    T_cw = affines.compose(position, rot_mat, np.ones(3))
-                    T_wc = np.linalg.inv(T_cw)
-
-                else:
-                    rot_mat = np.array(data[4:]).reshape(3, 3)
-                    T_wc = affines.compose(position, rot_mat, np.ones(3))
-                    T_ow = np.array(
-                        [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
-                    )
-                    if POLY:
-                        # NOTE - had to tweak T_ow to get the correct orientation...not sure why
-                        # that was the case for the poly model...
-                        theta = np.radians(45)  # Convert degrees to radians
-                        T_ow = np.array(
-                            [
-                                [np.cos(theta), 0, np.sin(theta), 0],
-                                [0, 1, 0, 0],
-                                [-np.sin(theta), 0, np.cos(theta), 0],
-                                [0, 0, 0, 1],
-                            ]
-                        )
+                rot_mat = np.array(data[4:]).reshape(3, 3)
+                T_wc = affines.compose(position, rot_mat, np.ones(3))
+                T_ow = np.array(
+                    [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+                )
 
                 T_oc = T_wc @ T_ow
                 pose_save_path = osp.join(paths["out_pose_dir"], "{}.txt".format(index))
@@ -311,32 +229,6 @@ def data_process_anno(data_dir, downsample_rate=1, hw=512):
     )
 
 
-def data_process_test(data_dir, downsample_rate=1):
-    paths = get_test_default_path(data_dir)
-
-    # Parse intrinsic:
-    with open(paths["orig_intrin_file"], "r") as f:
-        lines = [l.strip() for l in f.readlines() if len(l) > 0 and l[0] != "#"]
-    eles = [[float(e) for e in l.split(",")] for l in lines]
-    data = np.array(eles)
-    fx, fy, cx, cy = np.average(data, axis=0)[2:]
-    with open(paths["final_intrin_file"], "w") as f:
-        f.write("fx: {0}\nfy: {1}\ncx: {2}\ncy: {3}".format(fx, fy, cx, cy))
-
-    # Parse video:
-    cap = cv2.VideoCapture(paths["video_file"])
-    index = 0
-    while True:
-        ret, image = cap.read()
-        if not ret:
-            break
-        if index % downsample_rate == 0:
-            full_img_dir = paths["color_full_dir"]
-            cv2.imwrite(osp.join(full_img_dir, "{}.png".format(index)), image)
-        index += 1
-    cap.release()
-
-
 def parse_args():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -351,19 +243,12 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     data_dir = args.scanned_object_path
-    global DEMO, POLY
-    DEMO = "demo" in data_dir
-    POLY = "poly" in data_dir
 
     assert osp.exists(data_dir), f"Scanned object path:{data_dir} not exists!"
 
     seq_dirs = os.listdir(data_dir)
     for seq_dir in seq_dirs:
-        if "-test" in seq_dir:
-            # Parse scanned test sequence
-            print("=> Processing test sequence: ", seq_dir)
-            data_process_test(osp.join(data_dir, seq_dir), downsample_rate=1)
-        elif "-annotate" in seq_dir:
+        if "-annotate" in seq_dir:
             print("=> Processing annotate sequence: ", seq_dir)
             data_process_anno(osp.join(data_dir, seq_dir), downsample_rate=1, hw=512)
         else:
