@@ -1,19 +1,22 @@
 # Spot Pose Estimation
 
-Training and testing custom pose estimation pipelines can be a tedious and time-consuming process when initially being confronted by all the various existing algorithms out there.
+Set-up, training and testing custom pose estimation pipelines is non-trivial. It can be a tedious and time-consuming process. This repository aims to simplify this.
 
-This repository is building on previous work [insert link to synthetic data pipeline] & contains both the instructions on how a minimal training set of synthetic data can be created for a custom object and subsequently used for training a custom pose estimation model using an optimized version of OnePose++.
+ <!-- by providing a Docker container and a minimal working example for training a custom pose estimation model for Boston Dynamics' Spot Robot using an extended version of [OnePose++](https://github.com/zju3dv/OnePose_Plus_Plus).
+ -->
 
-Furthermore it contains a demo script to test the trained model on a real-world dataset as well as a docker container to simplify the set-up process.
-
-## Main Contributions
-- Docker Container ready to run OnePose++
-- `launch.json` to help understand the demo pipeline
+The main contributions can be summarized as follows:
+- a Docker container ready to run an extended version of OnePose++
 - OnePose++ extended with:
-    - [DeepSingleCameraCalibration](https://github.com/AlanSavio25/DeepSingleImageCalibration/) for running inference on in-the-wild sequences
-    - [CoTracker2]() for pose estimation optimisation, bridging the missing cap of OnePose++ from traditional single-frame pose estimation to pose tracking, leveraging temporal cues as well[^2].
-    
-    [^2]: **Note:** As of this writing, CoTracker2 is still a work-in-progress. The OnlineTracker does not work in an online fashion yet, but the offline tracker is fully functional and used in this pipeline as a post-processing step to optimize the pose. The *'yet'* in [this](https://github.com/facebookresearch/co-tracker/issues/56#issuecomment-1878778614) reply to an issue on the CoTracker2 repository suggests that the online tracker will be released at some point in the future as well. 
+    - [DeepSingleCameraCalibration](https://github.com/AlanSavio25/DeepSingleImageCalibration/) for running inference on in-the-wild videos
+    - [CoTracker2]() for pose estimation optimization, improving the pose *tracking* performance by leveraging temporal cues as well[^2].
+ 
+- `launch.json` & `inference.py` to help understand the whole pipeline and readily debug/test the code. All modifications should be made in `inference.py` - no need to get familiar with different config files. 
+
+- custom data for Spot & instructions on how you can create the synthetic data for your own use-case
+   
+[^2]: **Note:** As of this writing, CoTracker2 is still a work-in-progress. The online tracker can only run on every 4th frame which does not suffice for optimizing the pose estimation. That's why we currently use CoTracker as a post-processing step to optimize the poses for a given sequence. The *'yet'* in [this](https://github.com/facebookresearch/co-tracker/issues/56#issuecomment-1878778614) reply by the authors suggests that this feauture will be added to CoTracker2 in the future. A possible initial implementation is on this [feature branch](https://github.com/mizeller/OnePose_ST/tree/feat-online-tracker). It has not been updated in a while...
+
 ## Set-Up
 
 ```shell

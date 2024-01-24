@@ -43,14 +43,14 @@ class CONFIG:
         self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}"
         # NOTE: there must exist a "color_full" sub-directory in ∀ data_dirs
         self.data_dirs: List[str] = [
-            "asus_short",
+            # "asus_short",
             # "asus_long",
             # "hololens-00",
             # "hololens-01",
             # "hololens-02",
             # "yt_arm_long",
             # "yt_arm_short",
-            # "yt_no_arm",
+            "yt_no_arm",
         ]
         self.sfm_model_dir: str = (
             f"{self.data_root}/sfm_model/outputs_softmax_loftr_loftr/{self.obj_name}"
@@ -59,7 +59,7 @@ class CONFIG:
         self.model: dict = self._get_model()
 
         # pose estimation optimization meta parameters
-        self.temp_thresh: int = 5  # time horizon for tracking & initialization phase
+        self.temp_thresh: int = 30  # time horizon for tracking & initialization phase
         self.inliers_only: bool = (
             True  # use only the inliers for tracking OR all previous key points
         )
