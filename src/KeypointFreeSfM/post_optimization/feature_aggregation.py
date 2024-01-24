@@ -70,7 +70,7 @@ def feature_aggregation_and_update(
                 feature0 = fine_match_results["feature0"][index]  # [dim]
                 feature1 = fine_match_results["feature1"][index]  # [dim]
 
-                if keypoints_update_method is not "colmap_updated_keypoints":
+                if keypoints_update_method != "colmap_updated_keypoints":
                     keypoints0 = fine_match_results["mkpts0_f"][index]
                     keypoints1 = fine_match_results["mkpts1_f"][index]
                     query_keypoints.append(keypoints0)
@@ -114,7 +114,7 @@ def feature_aggregation_and_update(
                     :, ref_kpt_idx
                 ] = feature1
 
-                if keypoints_update_method is not "colmap_updated_keypoints":
+                if keypoints_update_method != "colmap_updated_keypoints":
                     feature_dict_fine[right_img_name]["keypoints"][
                         ref_kpt_idx, :
                     ] = keypoints1
@@ -156,7 +156,7 @@ def feature_aggregation_and_update(
         feature_dict_coarse[left_img_name]["scores"][query_kpt_idx] = 0 # Just place-holder!
         feature_dict_fine[left_img_name]["scores"][query_kpt_idx] = 0
 
-        if keypoints_update_method is not "colmap_updated_keypoints":
+        if keypoints_update_method != "colmap_updated_keypoints":
             query_keypoints = np.stack(query_keypoints, axis=0)  # N*2
             query_keypoints = np.mean(query_keypoints, axis=0, keepdims=False)  # [2]
             feature_dict_fine[left_img_name]["keypoints"][
