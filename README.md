@@ -1,12 +1,19 @@
 # Spot Pose Estimation
 
-## Hey!
-This is a slightly modified fork of the original OnePose++ repository to handle our own synthetic data. 
+Training and testing custom pose estimation pipelines can be a tedious and time-consuming process when initially being confronted by all the various existing algorithms out there.
 
-For more information about the dataset and how it was created check out this repo: [Monocular Pose Estimation Pipeline for Boston Dynamic's Spot](https://github.com/mizeller/Monocluar-Pose-Estimation-Pipeline-for-Spot)
+This repository is building on previous work [insert link to synthetic data pipeline] & contains both the instructions on how a minimal training set of synthetic data can be created for a custom object and subsequently used for training a custom pose estimation model using an optimized version of OnePose++.
 
-Since quite some effort went into setting up a working-environment, and to simplify collaboration on this project, we compiled a working docker container. 
+Furthermore it contains a demo script to test the trained model on a real-world dataset as well as a docker container to simplify the set-up process.
 
+## Main Contributions
+- Docker Container ready to run OnePose++
+- `launch.json` to help understand the demo pipeline
+- OnePose++ extended with:
+    - [DeepSingleCameraCalibration](https://github.com/AlanSavio25/DeepSingleImageCalibration/) for running inference on in-the-wild sequences
+    - [CoTracker2]() for pose estimation optimisation, bridging the missing cap of OnePose++ from traditional single-frame pose estimation to pose tracking, leveraging temporal cues as well[^2].
+    
+    [^2] **Note:** As of this writing, CoTracker2 is still a work-in-progress. The OnlineTracker does not work in an online fashion yet, but the offline tracker is fully functional and used in this pipeline as a post-processing step to optimize the pose. The *'yet'* in [this](https://github.com/facebookresearch/co-tracker/issues/56#issuecomment-1878778614) reply to an issue on the CoTracker2 repository suggests that the online tracker will be released at some point in the future as well. 
 ## Set-Up
 
 ```shell
@@ -70,4 +77,6 @@ You can also use the built-in VSCode debugger to follow the demo pipeline step b
 
 ## Acknowledgement
 This repository is essentially a fork of the original OnePose++ repository - for more details, have a look at the original source [here](https://github.com/zju3dv/OnePose_Plus_Plus). Thanks to the original authors for their great work!
-```
+
+## Credits
+This project was developed as part of the Semester Thesis for my (Matthew Hanlon) MSc. Robotics, Systems and Control at ETH Zurich. The project was supervised by Eric Vollenweider (Microsoft Mixed Reality and AI Lab Zurich), in collaboration with the Computer Vision and Geometry Group.
