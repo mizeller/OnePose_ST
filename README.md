@@ -82,4 +82,4 @@ You can also use the built-in VSCode debugger to follow the demo pipeline step b
 This repository is essentially a fork of the original OnePose++ repository - for more details, have a look at the original source [here](https://github.com/zju3dv/OnePose_Plus_Plus). Thanks to the original authors for their great work!
 
 ## Credits
-This project was developed as part of the Semester Thesis for my (Matthew Hanlon) MSc. Robotics, Systems and Control at ETH Zurich. The project was supervised by Eric Vollenweider (Microsoft Mixed Reality and AI Lab Zurich), in collaboration with the Computer Vision and Geometry Group.
+This project was developed as part of the Semester Thesis for my (Michel Zeller) MSc. Mechanical Engineering at ETH Zurich. The project was supervised by Dr. Hermann Blum (ETH, Computer Vision and Geometry Group) and Francesco Milano (ETH, Autonomous Systems Lab). 
