@@ -9,6 +9,7 @@ import pickle
 import numpy as np
 import torch
 import cv2
+import argparse
 
 from src.utils import data_utils, vis_utils, metric_utils, data_io, path_utils
 from src.utils.optimization_utils import MKPT
@@ -35,22 +36,24 @@ class CONFIG:
         pad3D: bool = (
             False  # if True: pad 3D point cloud to shape3d_val else: use all points
         )
-        shape3d_val: int = 7000  # number of points in 3D point cloud; only used if pad3D is True
+        shape3d_val: int = (
+            7000  # number of points in 3D point cloud; only used if pad3D is True
+        )
 
     def __init__(self):
         # TODO: adapt obj_name and data_dirs to your needs
-        self.obj_name: str = "spot_rgb"  # "spot"
+        self.obj_name: str = "spot_rgb"
         self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}"
         # NOTE: there must exist a "color_full" sub-directory in ∀ data_dirs
-        self.data_dirs: List[str] = [
-            # "asus_short",
+        self.test_dirs: List[str] = [
+            "asus_short",
             # "asus_long",
             # "hololens-00",
             # "hololens-01",
             # "hololens-02",
             # "yt_arm_long",
             # "yt_arm_short",
-            "yt_no_arm",
+            # "yt_no_arm",
         ]
         self.sfm_model_dir: str = (
             f"{self.data_root}/sfm_model/outputs_softmax_loftr_loftr/{self.obj_name}"
@@ -59,7 +62,7 @@ class CONFIG:
         self.model: dict = self._get_model()
 
         # pose estimation optimization meta parameters
-        self.temp_thresh: int = 30  # time horizon for tracking & initialization phase
+        self.temp_thresh: int = 5  # time horizon for tracking & initialization phase
         self.inliers_only: bool = (
             True  # use only the inliers for tracking OR all previous key points
         )
@@ -68,9 +71,16 @@ class CONFIG:
         self.debug_pose_estimation: bool = False
         self.debug_tracking: bool = False
         self.debug_triangulation: bool = False
-        self.use_cache: bool = False # skip pose estimation if cache exists (for debugging)
-        
-        
+        self.use_cache: bool = (
+            False  # skip pose estimation if cache exists (for debugging)
+        )
+
+    def update_from_args(self, args):
+        if args.obj_name is not None:
+            self.obj_name = args.obj_name
+        if args.test_dirs is not None:
+            self.test_dirs = args.test_dirs.split(",")
+
     def _get_model(self) -> dict:
         with open("configs/experiment/inference_demo.yaml", "r") as f:
             onepose_config = yaml.load(f, Loader=yaml.FullLoader)
@@ -120,7 +130,7 @@ def plot_keypoints_on_frames(video, tracks, visibilities):
 ####################################################################################################
 
 
-def inference_core(seq_dir):
+def inference_core(cfg: CONFIG, seq_dir: str):
     """Inference core function for OnePosePlus."""
     logger.warning(f"Running inference on {seq_dir}")
     img_list, paths = path_utils.get_default_paths(
@@ -155,8 +165,8 @@ def inference_core(seq_dir):
     pkl_file: str = f"{seq_dir}/pose_estimation_cache.pkl"
     ####################################################################################################
     # POSE ESTIMATION
-    skip_pose_estimation: bool = cfg.use_cache and Path(pkl_file).exists()
     ####################################################################################################
+    skip_pose_estimation: bool = cfg.use_cache and Path(pkl_file).exists()
     if not skip_pose_estimation:
         Path("temp/original_pose_predictions").mkdir(exist_ok=True, parents=True)
         logger.warning("running pose estimation...")
@@ -260,7 +270,6 @@ def inference_core(seq_dir):
         cache = {"mkpts_cache": mkpts_cache, "pred_poses": pred_poses}
         with open(pkl_file, "wb") as f:
             pickle.dump(cache, f)
-
     ####################################################################################################
     # POSE ESTIMATION OPTIMIZATION
     ####################################################################################################
@@ -276,7 +285,7 @@ def inference_core(seq_dir):
     mkpts_cache = cache["mkpts_cache"]
     pred_poses = cache["pred_poses"]
     tracker: CoTrackerPredictor = CoTrackerPredictor(
-        checkpoint="submodules/CoTracker/checkpoints/cotracker2.pth"
+        checkpoint="weight/cotracker2.pth"
     )
     tracker = tracker.cuda()
     video = data_io.read_video_from_path(Path(f"{seq_dir}/color_full"))
@@ -472,19 +481,33 @@ def inference_core(seq_dir):
 
 
 def main() -> None:
-    # loop over all data_dirs specified in the CONFIG class
-    for test_dir in cfg.data_dirs:
+    cfg: CONFIG = CONFIG()
+
+    # parse optional arguments
+    parser = argparse.ArgumentParser(description="OnePosePlus Inference Script")
+    parser.add_argument(
+        "--obj_name", type=str, help="Object name to be used for inference"
+    )
+    parser.add_argument(
+        "--test_dirs", type=str, help="Comma-separated list of test directories"
+    )
+    args = parser.parse_args()
+
+    # and update configs accordingly.
+    cfg.update_from_args(args)
+
+    if cfg.debug_pose_estimation:
+        Path("temp/debug").mkdir(exist_ok=True, parents=True)
+
+    # loop over all test direscories specified in the CONFIG class
+    for test_dir in cfg.test_dirs:
         seq_dir = osp.join(cfg.data_root, test_dir)
-        inference_core(seq_dir)
+        inference_core(cfg=cfg, seq_dir=seq_dir)
 
     logger.warning("Done")
     return
 
 
 if __name__ == "__main__":
-    global cfg
-    cfg: CONFIG = CONFIG()
     os.system(f"rm -rf temp/*")
-    if cfg.debug_pose_estimation:
-        Path("temp/debug").mkdir(exist_ok=True, parents=True)
     main()
