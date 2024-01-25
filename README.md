@@ -1,5 +1,10 @@
 # Spot Pose Estimation
+<!-- TODO: add links -->
+<h4 align="center"><a href="">Thesis Report</a> | <a href="">Slides</a></h3>
 
+<p align="center">
+<img src="assets/preview.gif"/>
+</p>
 Set-up, training and testing custom pose estimation pipelines is non-trivial. It can be a tedious and time-consuming process. This repository aims to simplify this.
 
 The main contributions can be summarized as follows:
@@ -99,3 +104,4 @@ TODO: remove this section later; just intended for notes/miscellaneous
 - remove execution permission from all files in current directory: `chmod -x *`
 - stack videos w/ `ffmpeg`: `sudo ffmpeg -i 00_hololens-test.mp4 -i 01_hololens-test.mp4 -i 02_hololens-test.mp4 -filter_complex "[0:v][1:v][2:v]hstack=inputs=3" output.mp4`
 - convert folder (`color_full`) of frames to clip.mp4: `ffmpeg -framerate 30 -i color_full/%04d.png clip.mp4`
+- create preview gif: `ffmpeg -i preview.mp4 -vf "fps=30" -c:v gif preview.gif`
