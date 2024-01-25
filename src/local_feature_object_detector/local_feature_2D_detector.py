@@ -1,5 +1,6 @@
 import os.path as osp
 import cv2
+import natsort
 import torch
 import numpy as np
 import pytorch_lightning as pl
@@ -60,38 +61,15 @@ class LocalFeatureObjectDetector:
 
     def load_ref_view_images(self, sfm_ws_dir, n_ref_view):
         assert osp.exists(sfm_ws_dir), f"SfM work space:{sfm_ws_dir} not exists!"
-        # _, images, _ = read_model(sfm_ws_dir)
-        # idx = 0
-        # sample_gap = len(images) // n_ref_view
-        # db_image_paths = natsort.natsorted([image.name for image in images.values()])
-        # FIXME: just hardcode some good reference frames here to check if it makes a difference (especially for the "Blind Spot" problem)
-        db_image_paths = [
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/4.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/8.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/12.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/14.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/18.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/22.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/26.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/30.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/32.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/32.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/35.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/37.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/41.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/45.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/48.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/51.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/54.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/57.png",
-            "/workspaces/OnePose_ST/data/spot_rgb/training/scene_00-annotate/color/64.png",
-        ]
+        _, images, _ = read_model(sfm_ws_dir)
+        idx = 0
+        sample_gap = len(images) // n_ref_view
+        db_image_paths = natsort.natsorted([image.name for image in images.values()])
 
         db_imgs = []  # id: image
         db_corners_homo = []
-        # for idx in range(1, len(images), sample_gap):
-        #     db_img_path = db_image_paths[idx]
-        for db_img_path in db_image_paths:
+        for idx in range(1, len(images), sample_gap):
+            db_img_path = db_image_paths[idx]
             db_img = cv2.imread(db_img_path, cv2.IMREAD_GRAYSCALE)
             db_imgs.append(torch.from_numpy(db_img)[None][None] / 255.0)
             H, W = db_img.shape[-2:]
@@ -162,7 +140,6 @@ class LocalFeatureObjectDetector:
                 "inliers": inliers,
                 "bbox": np.array([x0, y0, x1, y1]),
             }
-
 
         return detect_results_dict
 
