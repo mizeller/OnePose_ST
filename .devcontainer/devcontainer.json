@@ -2,7 +2,7 @@
 // README at: https://github.com/devcontainers/templates/tree/main/src/docker-existing-dockerfile
 {
 	"name": "Spot Pose Estimation",
-	"image": "spot_pose_estimation:cotracker",
+	"image": "mizeller/spot_pose_estimation:00",
 	"runArgs": [
 		"--gpus",
 		"all",
