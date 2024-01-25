@@ -21,8 +21,11 @@ from src.local_feature_object_detector.local_feature_2D_detector import (
 from src.models.OnePosePlus.OnePosePlusModel import OnePosePlus_model
 
 # CoTracker
-from submodules.CoTracker.cotracker.predictor import CoTrackerPredictor
-from submodules.CoTracker.cotracker.utils.visualizer import Visualizer
+import sys
+
+sys.path.append("submodules/CoTracker")
+from cotracker.predictor import CoTrackerPredictor
+from cotracker.utils.visualizer import Visualizer
 
 
 ####################################################################################################
@@ -43,7 +46,6 @@ class CONFIG:
     def __init__(self):
         # TODO: adapt obj_name and data_dirs to your needs
         self.obj_name: str = "spot_rgb"
-        self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}"
         # NOTE: there must exist a "color_full" sub-directory in ∀ data_dirs
         self.test_dirs: List[str] = [
             "asus_short",
@@ -55,9 +57,7 @@ class CONFIG:
             # "yt_arm_short",
             # "yt_no_arm",
         ]
-        self.sfm_model_dir: str = (
-            f"{self.data_root}/sfm_model/outputs_softmax_loftr_loftr/{self.obj_name}"
-        )
+        self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}"
         self.datamodule = CONFIG.DATAMODULE()
         self.model: dict = self._get_model()
 
@@ -72,7 +72,7 @@ class CONFIG:
         self.debug_tracking: bool = False
         self.debug_triangulation: bool = False
         self.use_cache: bool = (
-            False  # skip pose estimation if cache exists (for debugging)
+            True  # skip pose estimation if cache exists (for debugging)
         )
 
     def update_from_args(self, args):
@@ -80,6 +80,11 @@ class CONFIG:
             self.obj_name = args.obj_name
         if args.test_dirs is not None:
             self.test_dirs = args.test_dirs.split(",")
+
+        self.data_root: str = f"/workspaces/OnePose_ST/data/{self.obj_name}"
+        self.sfm_model_dir: str = (
+            f"{self.data_root}/sfm_model/outputs_softmax_loftr_loftr/{self.obj_name}"
+        )
 
     def _get_model(self) -> dict:
         with open("configs/experiment/inference_demo.yaml", "r") as f:
@@ -284,9 +289,7 @@ def inference_core(cfg: CONFIG, seq_dir: str):
 
     mkpts_cache = cache["mkpts_cache"]
     pred_poses = cache["pred_poses"]
-    tracker: CoTrackerPredictor = CoTrackerPredictor(
-        checkpoint="weight/cotracker2.pth"
-    )
+    tracker: CoTrackerPredictor = CoTrackerPredictor(checkpoint="weight/cotracker2.pth")
     tracker = tracker.cuda()
     video = data_io.read_video_from_path(Path(f"{seq_dir}/color_full"))
     video = torch.from_numpy(video).permute(0, 3, 1, 2)[None].float()
