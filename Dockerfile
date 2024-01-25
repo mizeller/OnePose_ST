@@ -100,7 +100,7 @@ RUN python3 -m pip install -r /OnePose_ST/requirements.txt
 RUN python3 -m pip install imageio[ffmpeg]
 
 ## INSTALL COTRACKER DEPENDENCIES
-COPY co-tracker/setup.py /OnePose_ST
+COPY submodules/CoTracker/setup.py /OnePose_ST
 RUN python3 -m pip install -e .
 
 RUN ln -s /usr/bin/gcc-9 /usr/local/cuda-11.3/bin/gcc && ln -s /usr/bin/g++-9 /usr/local/cuda-11.3/bin/g++
