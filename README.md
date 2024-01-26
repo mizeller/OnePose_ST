@@ -102,3 +102,10 @@ This repository uses several submodules, please refer to the respective reposito
 
 ## Credits
 This project was developed as part of the Semester Thesis for my (Michel Zeller) MSc. Mechanical Engineering at ETH Zurich. The project was supervised by Dr. Hermann Blum (ETH, Computer Vision and Geometry Group) and Francesco Milano (ETH, Autonomous Systems Lab). 
+
+## TODO
+- [ ] move repo to [CVG organisation](https://github.com/cvg)https://github.com/cvg and adapt readme accordingly
+- [ ] test docker set up using terminal commands; VSCode/devcontainer approach worked
+- [ ] test docker set up with pre-build container from DockerHub
+- [ ] clean up ReadMe & code [here](https://github.com/mizeller/Monocluar-Pose-Estimation-Pipeline-for-Spot)
+- [ ] (add it to cvg as well?) 
