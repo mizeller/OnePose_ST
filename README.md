@@ -1,10 +1,12 @@
-# Spot Pose Estimation
+# Robust Visual Pose Estimation for in the Wild Videos of Spot
+#### Semester Thesis, ETH Zurich, Autumn Semester 2023
 <!-- TODO: add links -->
 <h4 align="center"><a href="">Thesis Report</a> | <a href="">Slides</a></h3>
 
 <p align="center">
 <img src="assets/preview.gif"/>
 </p>
+
 Set-up, training and testing custom pose estimation pipelines is non-trivial. It can be a tedious and time-consuming process. This repository aims to simplify this.
 
 The main contributions can be summarized as follows:
@@ -33,27 +35,22 @@ Docker Version: 24.0.7, build afdd53b
 ```
 
 ### Code
+Set up the code by cloning the repository, initializing the submodules and downloading the necessary models and demo data: 
 ```shell
 git clone git@github.com:mizeller/OnePose_ST.git
 cd OnePose_ST
 git submodule update --init --recursive
 mkdir -p data weight 
 ```
+The pre-trained models for OnePose++, LoFTR and CoTracker2 as well as the demo data can be found [here](https://drive.google.com/drive/folders/1VIuflRl8WdJVcwpsHOFlmeoM7b3I1HlV?usp=sharing). Place the model files in `weight/` and the demo data in `data/`.
 
-The OnePose++, LoFTR & CoTracker2 models as well as the demo data can be found [here](https://drive.google.com/drive/folders/1VIuflRl8WdJVcwpsHOFlmeoM7b3I1HlV?usp=sharing). Place the model files in `weight/` and the demo data in `data/`.
-
-<details>
-<summary>Project Tree at this point...</summary>
-
-The project directory should look like this:
+At this point, the project directory should look like this:
 ```shell
 .
 ├── assets
 ...
 ├── data
 │   └── spot_demo
-├── src
-│   └── ...
 ├── submodules
 │   ├── CoTracker
 │   ├── DeepLM
@@ -63,29 +60,22 @@ The project directory should look like this:
     ├── OnePosePlus_model.ckpt
     └── cotracker2.pth
 ```
-</details>
 
 ### Docker
-Next, the docker container needs to be set up and run. There are two options to achieve this.
-
-Either the container is build from scratch:
+To set up the docker container either build it locally
 ```shell
 docker build -t="mizeller/spot_pose_estimation:00" .
 ```
-or a pre-built container can be used:
+or pull a pre-built container from DockerHub:
 ```shell
 docker pull mizeller/spot_pose_estimation:00
 ```
 Next, the container needs to be run. Again, there are several options to do this.
 
-In case you're using VSCode's `devcontainer` feature, simply run:
-```
-CTRL+SHIFT+P
-Dev Containers: Rebuild and Reopen in Container 
-```
-The `devcontainer.json` file should be configured to use the pre-built container and can be found in the `.devcontainer` directory.
+In case you're using VSCode's `devcontainer` feature, simply press `CTRL+SHIFT+P` and select `Rebuild and Reopen in Container`.
+This will re-open the project in a docker container.
 
-Alternatively, you can run the docker container directly from the terminal. The following command also mounts the `${REPO_ROOT}` in the container.
+Alternatively, you can run the docker container directly from the terminal. The following command mounts the `${REPO_ROOT}` in the container.
 
 ```shell
 REPO_ROOT=$(pwd)
@@ -103,8 +93,10 @@ The results will be saved in the `temp/` directory.
 FYI: There are also custom debug entry points for each step o f the pipeline. Have a look at the `.vscode/launch.json`.
 
 
-## Acknowledgement
+## Acknowledgement & License
 This repository is essentially a fork of the original OnePose++ repository - for more details, have a look at the original source [here](https://github.com/zju3dv/OnePose_Plus_Plus). Thanks to the original authors for their great work!
+
+This repository uses several submodules, please refer to the respective repositories for their licenses.
 
 ## Credits
 This project was developed as part of the Semester Thesis for my (Michel Zeller) MSc. Mechanical Engineering at ETH Zurich. The project was supervised by Dr. Hermann Blum (ETH, Computer Vision and Geometry Group) and Francesco Milano (ETH, Autonomous Systems Lab). 
