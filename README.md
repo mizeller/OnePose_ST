@@ -82,7 +82,7 @@ REPO_ROOT=$(pwd)
 docker run --gpus all -w /workspaces/OnePose_ST -v ${REPO_ROOT}:/workspaces/OnePose_ST -it mizeller/spot_pose_estimation:00
 ```
 
-## DEMO
+## Demo: Training & Inference
 To test the set up (training and inference), run the demo script from a terminal in the docker container: `sh demo.sh`. This will run the following steps:
 1. Parse the demo data
 2. Train the OnePose++ model for Spot
@@ -90,8 +90,10 @@ To test the set up (training and inference), run the demo script from a terminal
 
 The results will be saved in the `temp/` directory. 
 
-FYI: There are also custom debug entry points for each step o f the pipeline. Have a look at the `.vscode/launch.json`.
+FYI: There are also custom debug entry points for each step of the pipeline. Have a look at the `.vscode/launch.json`.
 
+### Training Data
+**TODO: add comments about synthetic data pipeline & clean up the other repo as well**
 
 ## Acknowledgement & License
 This repository is essentially a fork of the original OnePose++ repository - for more details, have a look at the original source [here](https://github.com/zju3dv/OnePose_Plus_Plus). Thanks to the original authors for their great work!
