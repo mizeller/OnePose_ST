@@ -1,4 +1,5 @@
 FROM nvidia/cudagl:11.3.1-devel-ubuntu20.04
+LABEL org.opencontainers.image.source https://github.com/mizeller/Spot-Pose-Estimation
 
 ## INIT SETUP
 ENV DEBIAN_FRONTEND=noninteractive
