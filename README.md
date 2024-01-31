@@ -75,11 +75,11 @@ Next, the container needs to be run. Again, there are several options to do this
 In case you're using VSCode's `devcontainer` feature, simply press `CTRL+SHIFT+P` and select `Rebuild and Reopen in Container`.
 This will re-open the project in a docker container.
 
-Alternatively, you can run the docker container directly from the terminal. The following command mounts the `${REPO_ROOT}` in the container.
+Alternatively, you can run the docker container directly from the terminal. The following command mounts the `${REPO_ROOT}` in the container. Note that the shared memory size is set to 32GB, change it to your hardware if necessary.
 
 ```shell
 REPO_ROOT=$(pwd)
-docker run --gpus all -w /workspaces/OnePose_ST -v ${REPO_ROOT}:/workspaces/OnePose_ST -it mizeller/spot_pose_estimation:00
+docker run --gpus all --shm-size=32g -w /workspaces/OnePose_ST -v ${REPO_ROOT}:/workspaces/OnePose_ST -it mizeller/spot_pose_estimation:00
 ```
 
 ## Demo: Training & Inference
