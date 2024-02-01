@@ -8,7 +8,6 @@ from pathlib import Path
 import pickle
 import numpy as np
 import torch
-import cv2
 import argparse
 
 from src.utils import data_utils, vis_utils, metric_utils, data_io, path_utils
@@ -70,7 +69,6 @@ class CONFIG:
         # debug flags
         self.debug_pose_estimation: bool = False
         self.debug_tracking: bool = False
-        self.debug_triangulation: bool = False
         self.use_cache: bool = (
             True  # skip pose estimation if cache exists (for debugging)
         )
@@ -90,46 +88,6 @@ class CONFIG:
         with open("configs/experiment/inference_demo.yaml", "r") as f:
             onepose_config = yaml.load(f, Loader=yaml.FullLoader)
         return onepose_config["model"]
-
-
-def plot_keypoints_on_frames(video, tracks, visibilities):
-    """
-    video            torch.Tensor       [B, F, C, H, W]     sliced video w/ F frames
-    tracks           torch.Tensor       [B, F, N, 2]        x-y coordinates of N tracked keypoints over F frames
-    visibilities     torch.Tensor       [B, F, N]           visibility of N tracked keypoints over F frames
-    pred_poses       dict               {F: pose}           predicted poses for F frames
-    """
-
-    if not Path("temp/debug").exists():
-        os.makedirs("temp/debug", exist_ok=True)
-
-        # Normalize the video frames to the range [0, 1] for plotting
-        video = video - video.min()
-        video = video / video.max()
-
-        # re-map the keys of pred_poses to match the frame id of the sliced video
-
-        # Iterate over each frame and its corresponding keypoints
-        for i, (frame, keypoints, visibility) in enumerate(
-            zip(video[0], tracks[0], visibilities[0])
-        ):
-            # NOTE: only try to triangulate 2 points
-            # Convert the frame and keypoints to numpy arrays
-            frame = frame.permute(1, 2, 0).cpu().numpy()
-            keypoints = keypoints.cpu().numpy()
-            visibility = visibility.cpu().numpy()
-
-            # Scale the frame to the range [0, 255]
-            frame = (frame * 255).astype(np.uint8)
-
-            # Draw the keypoints on the frame
-            for x, y in keypoints[visibility]:
-                cv2.circle(
-                    frame, (int(x), int(y)), radius=2, color=(0, 0, 255), thickness=-1
-                )
-
-            # Save the frame
-            cv2.imwrite(f"temp/debug/frame_{i}.png", frame)
 
 
 ####################################################################################################
@@ -359,43 +317,6 @@ def inference_core(cfg: CONFIG, seq_dir: str):
 
         # extract the tracked key points from the last frame
         mkpt.set_new_mkpts(_tracks)
-
-        if cfg.debug_triangulation:
-            # at this point, given the coordinates of the inliers in several frames
-            # and the associated camera-image transformation, triangulate the associated
-            # 3D point and add it to the model!
-            _pred_poses = [
-                pred_poses[j][0]
-                for j in range(frame_id - cfg.temp_thresh, frame_id + 1)
-            ]
-
-            n_pts: int = 50 if _tracks.shape[2] >= 50 else _tracks.shape[2]
-
-            if bool(n_pts):
-                _tracks = _tracks[:, :, :n_pts, :]
-                _visibility = _visibility[:, :, :n_pts]
-
-            kpts_3D_homo = cv2.triangulatePoints(
-                _pred_poses[0],
-                _pred_poses[-1],
-                _tracks[0, 0, :, :].cpu().numpy().T,
-                _tracks[0, -1, :, :].cpu().numpy().T,
-            ).T
-            kpts_3D = kpts_3D_homo[:, :3] / kpts_3D_homo[:, 3:]
-            updated_model = np.append(updated_model, kpts_3D, axis=0)
-            plot_keypoints_on_frames(sliced_video, _tracks, _visibility)
-            vis_2 = Visualizer(
-                save_dir=f"temp/debug",
-                linewidth=1,
-                mode="cool",
-                tracks_leave_trace=-1,
-            )
-            vis_2.visualize(
-                video=sliced_video[:, :, [2, 1, 0], :, :],  # BGR -> RGB
-                tracks=_tracks,
-                visibility=_visibility,
-                filename=f"tracked_seq",
-            )
 
         # inject the tracked key points before the ransac PnP step
         mkpts_2d_injected = np.concatenate(
