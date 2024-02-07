@@ -1,7 +1,7 @@
 # Robust Visual Pose Estimation for in the Wild Videos of Spot
 #### Semester Thesis, ETH Zurich, Autumn Semester 2023
 <!-- TODO: add links -->
-<h4 align="center"><a href="">Thesis Report</a> | <a href="">Slides</a></h3>
+<h4 align="center"><a href="https://drive.google.com/file/d/1yH0SYx3oX_xj5jh_swEvk2s8uesZuKhm/view?usp=sharing">Thesis Report</a> | <a href="">Slides</a></h3>
 
 <p align="center">
 <img src="assets/preview.gif"/>
