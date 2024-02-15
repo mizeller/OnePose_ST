@@ -1,7 +1,8 @@
 # Robust Visual Pose Estimation for in the Wild Videos of Spot
 #### Semester Thesis, ETH Zurich, Autumn Semester 2023
 <!-- TODO: add links -->
-<h4 align="center"><a href="https://drive.google.com/file/d/1XU4ywK_CfDcl1PXfGDnL9Eu9dXu7_x_I/view?usp=sharing">Thesis Report</a> | <a href="https://drive.google.com/file/d/1xA1zf_bvBT4a0MV5AR-wBHTe2BoZyMmC/view?usp=sharing">Slides</a></h3>
+<h4 align="center"><a href="https://drive.google.com/file/d/1XU4ywK_CfDcl1PXfGDnL9Eu9dXu7_x_I/view?usp=sharing">Thesis Report</a> | <a href="https://drive.google.com/file/d/1xA1zf_bvBT4a0MV5AR-wBHTe2BoZyMmC/view?usp=sharing">Slides (Keynote)</a> 
+| <a href="https://drive.google.com/file/d/1xA1zf_bvBT4a0MV5AR-wBHTe2BoZyMmC/view?usp=sharing">Slides (PDF)</a></h3>
 <p align="center"><img src="assets/preview.gif"/></p>
 
 Set-up, training and testing custom pose estimation pipelines is non-trivial. It can be a tedious and time-consuming process. This repository aims to simplify this.
